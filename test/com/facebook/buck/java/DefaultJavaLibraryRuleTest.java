@@ -144,8 +144,9 @@ public class DefaultJavaLibraryRuleTest {
         /* srcs */ ImmutableSet.<String>of(),
         ImmutableSet.of(
             new FileSourcePath("android/java/src/com/facebook/base/data.json"),
-            new FileSourcePath("android/java/src/com/facebook/common/util/data.json")
-        ),
+            new FileSourcePath("android/java/src/com/facebook/common/util/data.json"),
+            new FileSourcePath("matt.json")
+    ),
         /* optionalDummyRDotJava */ Optional.<DummyRDotJava>absent(),
         /* proguardConfig */ Optional.<String>absent(),
         /* exportedDeps */ ImmutableSortedSet.<BuildRule>of(),
@@ -162,8 +163,11 @@ public class DefaultJavaLibraryRuleTest {
             BIN_DIR + "/android/java/lib__resources__classes/com/facebook/base/data.json"),
         new MkdirAndSymlinkFileStep(
             "android/java/src/com/facebook/common/util/data.json",
-            BIN_DIR + "/android/java/lib__resources__classes/com/facebook/common/util/data.json"));
-    MoreAsserts.assertListEquals(expected, commands.build());
+            BIN_DIR + "/android/java/lib__resources__classes/com/facebook/common/util/data.json"),
+        new MkdirAndSymlinkFileStep(
+            "matt.json",
+            BIN_DIR + "/android/java/lib__resources__classes/matt.json"));
+        MoreAsserts.assertListEquals(expected, commands.build());
   }
 
   @Test
