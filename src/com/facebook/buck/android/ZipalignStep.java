@@ -22,12 +22,14 @@ import com.facebook.buck.util.AndroidPlatformTarget;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 
+import java.nio.file.Path;
+
 public class ZipalignStep extends ShellStep {
 
-  private final String inputFile;
-  private final String outputFile;
+  private final Path inputFile;
+  private final Path outputFile;
 
-  public ZipalignStep(String inputFile, String outputFile) {
+  public ZipalignStep(Path inputFile, Path outputFile) {
     this.inputFile = Preconditions.checkNotNull(inputFile);
     this.outputFile = Preconditions.checkNotNull(outputFile);
   }
@@ -39,8 +41,8 @@ public class ZipalignStep extends ShellStep {
     AndroidPlatformTarget androidPlatformTarget = context.getAndroidPlatformTarget();
     args.add(androidPlatformTarget.getZipalignExecutable().getAbsolutePath());
     args.add("-f").add("4");
-    args.add(inputFile);
-    args.add(outputFile);
+    args.add(inputFile.toString());
+    args.add(outputFile.toString());
     return args.build();
   }
 

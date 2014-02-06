@@ -67,6 +67,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileSystems;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -336,11 +337,39 @@ public final class Main {
    * @param args command line arguments
    * @return an exit code or {@code null} if this is a process that should not exit
    */
-  @SuppressWarnings("PMD.EmptyCatchBlock")
   public int runMainWithExitCode(File projectRoot, Optional<NGContext> context, String... args) throws IOException {
     if (args.length == 0) {
       return usage();
     }
+
+    // Find and execute command.
+    int exitCode;
+    Command.ParseResult command = Command.parseCommandName(args[0]);
+    if (command.getCommand().isPresent()) {
+      return executeCommand(projectRoot, command, context, args);
+    } else {
+      exitCode = new GenericBuckOptions(stdOut, stdErr).execute(args);
+      if (exitCode == GenericBuckOptions.SHOW_MAIN_HELP_SCREEN_EXIT_CODE) {
+        return usage();
+      } else {
+        return exitCode;
+      }
+    }
+  }
+
+
+  /**
+   * @param context an optional NGContext that is present if running inside a Nailgun server.
+   * @param args command line arguments
+   * @return an exit code or {@code null} if this is a process that should not exit
+   */
+  @SuppressWarnings("PMD.EmptyCatchBlock")
+  public int executeCommand(
+      File projectRoot,
+      Command.ParseResult commandParseResult,
+      Optional<NGContext> context,
+      String... args) throws IOException {
+
 
     // Create common command parameters. projectFilesystem initialization looks odd because it needs
     // ignorePaths from a BuckConfig instance, which in turn needs a ProjectFilesystem (i.e. this
@@ -360,28 +389,26 @@ public final class Main {
     }
     final Console console = new Console(verbosity, stdOut, stdErr, config.createAnsi(color));
 
-    // Find and execute command.
-    int exitCode;
-    Optional<Command> command = Command.getCommandForName(args[0], console);
-    if (!command.isPresent()) {
-      exitCode = new GenericBuckOptions(stdOut, stdErr).execute(args);
-      if (exitCode == GenericBuckOptions.SHOW_MAIN_HELP_SCREEN_EXIT_CODE) {
-        return usage();
-      } else {
-        return exitCode;
-      }
+    if (commandParseResult.getErrorText().isPresent()) {
+      console.getStdErr().println(commandParseResult.getErrorText().get());
     }
 
     // No more early outs: acquire the command semaphore and become the only executing command.
     if (!commandSemaphore.tryAcquire()) {
       return BUSY_EXIT_CODE;
     }
+
+    int exitCode;
     ImmutableList<BuckEventListener> eventListeners;
     String buildId = MoreStrings.createRandomString();
     Clock clock = new DefaultClock();
     ExecutionEnvironment executionEnvironment = new DefaultExecutionEnvironment();
+
+    // The order of resources in the try-with-resources block is important: the BuckEventBus must
+    // be the last resource, so that it is closed first and can deliver its queued events to the
+    // other resources before they are closed.
     try (AbstractConsoleEventBusListener consoleListener =
-             createConsoleEventListener(clock, console, executionEnvironment);
+             createConsoleEventListener(clock, console, verbosity, executionEnvironment);
          BuckEventBus buildEventBus = new BuckEventBus(clock, buildId)) {
       Optional<WebServer> webServer = getWebServerIfDaemon(context,
           projectFilesystem,
@@ -396,7 +423,7 @@ public final class Main {
       ImmutableList<String> remainingArgs = ImmutableList.copyOf(
           Arrays.copyOfRange(args, 1, args.length));
 
-      Command executingCommand = command.get();
+      Command executingCommand = commandParseResult.getCommand().get();
       String commandName = executingCommand.name().toLowerCase();
 
       CommandEvent commandEvent = CommandEvent.started(commandName, remainingArgs, isDaemon);
@@ -408,18 +435,15 @@ public final class Main {
 
       // Create or get Parser and invalidate cached command parameters.
       Parser parser;
+      KnownBuildRuleTypes buildRuleTypes = KnownBuildRuleTypes.getConfigured(config);
       if (isDaemon) {
-        // Wire up daemon to new client and console and get cached Parser.
-        Daemon daemon = getDaemon(projectFilesystem, config, console);
-        daemon.watchClient(context.get());
-        daemon.watchFileSystem(console, commandEvent);
-        daemon.initWebServer();
-        parser = daemon.getParser();
+        parser = getParserFromDaemon(context, projectFilesystem, config, console, commandEvent);
+
       } else {
         // Initialize logging and create new Parser for new process.
         JavaUtilsLoggingBuildListener.ensureLogFileIsWritten();
         parser = new Parser(projectFilesystem,
-            KnownBuildRuleTypes.getDefault(),
+            buildRuleTypes,
             console,
             config.getPythonInterpreter(),
             config.getTempFilePatterns(),
@@ -431,7 +455,7 @@ public final class Main {
           new CommandRunnerParams(
               console,
               projectFilesystem,
-              KnownBuildRuleTypes.getDefault(),
+              buildRuleTypes,
               artifactCacheFactory,
               buildEventBus,
               parser,
@@ -446,6 +470,7 @@ public final class Main {
         buildEventBus.post(LogEvent.info(
             "See trace at http://localhost:%s/trace/%s", port, buildId));
       }
+
       buildEventBus.post(CommandEvent.finished(commandName, remainingArgs, isDaemon, exitCode));
     } finally {
       commandSemaphore.release(); // Allow another command to execute while outputting traces.
@@ -458,6 +483,19 @@ public final class Main {
       eventListener.outputTrace(buildId);
     }
     return exitCode;
+  }
+
+  private Parser getParserFromDaemon(
+      Optional<NGContext> context,
+      ProjectFilesystem projectFilesystem,
+      BuckConfig config, Console console,
+      CommandEvent commandEvent) throws IOException {
+    // Wire up daemon to new client and console and get cached Parser.
+    Daemon daemon = getDaemon(projectFilesystem, config, console);
+    daemon.watchClient(context.get());
+    daemon.watchFileSystem(console, commandEvent);
+    daemon.initWebServer();
+    return daemon.getParser();
   }
 
   private Optional<WebServer> getWebServerIfDaemon(
@@ -484,7 +522,7 @@ public final class Main {
     try {
       int i = 0;
       for (String path : paths) {
-        String urlString = "file://" + projectFilesystem.getPathRelativizer().apply(path);
+        String urlString = "file://" + projectFilesystem.getAbsolutifier().apply(Paths.get(path));
         urlsArray[i] = new URL(urlString);
         i++;
       }
@@ -543,7 +581,6 @@ public final class Main {
 
 
 
-
     ImmutableList<BuckEventListener> eventListeners = eventListenersBuilder.build();
 
     for (BuckEventListener eventListener : eventListeners) {
@@ -554,8 +591,11 @@ public final class Main {
   }
 
   private AbstractConsoleEventBusListener createConsoleEventListener(
-      Clock clock, Console console, ExecutionEnvironment executionEnvironment) {
-    if (console.getAnsi().isAnsiTerminal()) {
+      Clock clock,
+      Console console,
+      Verbosity verbosity,
+      ExecutionEnvironment executionEnvironment) {
+    if (console.getAnsi().isAnsiTerminal() && !verbosity.shouldPrintCommand()) {
       SuperConsoleEventBusListener superConsole =
           new SuperConsoleEventBusListener(console, clock, executionEnvironment);
       superConsole.startRenderScheduler(SUPER_CONSOLE_REFRESH_RATE.getDuration(),

@@ -16,12 +16,14 @@
 
 package com.facebook.buck.java;
 
+import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.shell.ShellStep;
 import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.util.AndroidPlatformTarget;
 import com.facebook.buck.util.BuckConstant;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -34,8 +36,7 @@ import java.util.Set;
 
 public class JUnitStep extends ShellStep {
 
-  public static final String EMMA_OUTPUT_DIR =
-      String.format("%s/emma", BuckConstant.GEN_DIR);
+  public static final Path EMMA_OUTPUT_DIR = BuckConstant.GEN_PATH.resolve("emma");
 
   // Note that the default value is used when `buck test --all` is run on Buck itself.
   // TODO(mbolin): Change this so that pathToEmmaJar is injected. This is a non-trivial refactor
@@ -61,6 +62,8 @@ public class JUnitStep extends ShellStep {
 
   private final boolean isDebugEnabled;
 
+  private Optional<TestSelectorList> testSelectorListOptional;
+
   private final String testRunnerClassesDirectory;
 
   /**
@@ -77,7 +80,7 @@ public class JUnitStep extends ShellStep {
 
   public static final String JACOCO_EXEC_COVERAGE_FILE = "jacoco.exec";
 
-  public static final String JACOCO_OUTPUT_DIR = String.format("%s/jacoco", BuckConstant.GEN_DIR);
+  public static final Path JACOCO_OUTPUT_DIR = BuckConstant.GEN_PATH.resolve("jacoco");
 
   /**
    * @param classpathEntries contains the entries that will be listed first in the classpath when
@@ -94,7 +97,8 @@ public class JUnitStep extends ShellStep {
       String directoryForTestResults,
       boolean isCodeCoverageEnabled,
       boolean isJacocoEnabled,
-      boolean isDebugEnabled) {
+      boolean isDebugEnabled,
+      Optional<TestSelectorList> testSelectorListOptional) {
     this(classpathEntries,
         testClassNames,
         vmArgs,
@@ -102,6 +106,7 @@ public class JUnitStep extends ShellStep {
         isCodeCoverageEnabled,
         isJacocoEnabled,
         isDebugEnabled,
+        testSelectorListOptional,
         System.getProperty("buck.testrunner_classes",
             new File("build/testrunner/classes").getAbsolutePath()));
   }
@@ -115,6 +120,7 @@ public class JUnitStep extends ShellStep {
       boolean isCodeCoverageEnabled,
       boolean isJacocoEnabled,
       boolean isDebugEnabled,
+      Optional<TestSelectorList> testSelectorListOptional,
       String testRunnerClassesDirectory) {
     this.classpathEntries = ImmutableSet.copyOf(classpathEntries);
     this.testClassNames = ImmutableSet.copyOf(testClassNames);
@@ -123,6 +129,7 @@ public class JUnitStep extends ShellStep {
     this.isCodeCoverageEnabled = isCodeCoverageEnabled;
     this.isJacocoEnabled = isJacocoEnabled;
     this.isDebugEnabled = isDebugEnabled;
+    this.testSelectorListOptional = testSelectorListOptional;
     this.testRunnerClassesDirectory = Preconditions.checkNotNull(testRunnerClassesDirectory);
   }
 
@@ -199,6 +206,16 @@ public class JUnitStep extends ShellStep {
 
     // Add the default test timeout.
     args.add(String.valueOf(context.getDefaultTestTimeoutMillis()));
+
+    // Add the test selectors, one per line, in a single argument.
+    StringBuilder selectorsArgBuilder = new StringBuilder();
+    if (testSelectorListOptional.isPresent()) {
+      TestSelectorList testSelectorList = testSelectorListOptional.get();
+      for (String rawSelector : testSelectorList.getRawSelectors()) {
+        selectorsArgBuilder.append(rawSelector).append("\n");
+      }
+    }
+    args.add(selectorsArgBuilder.toString());
 
     // List all of the tests to be run.
     for (String testClassName : testClassNames) {

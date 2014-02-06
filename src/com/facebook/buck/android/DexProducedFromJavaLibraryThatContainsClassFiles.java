@@ -48,6 +48,7 @@ import com.google.common.hash.Hashing;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -86,7 +87,7 @@ public class DexProducedFromJavaLibraryThatContainsClassFiles extends AbstractBu
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     // The deps of this rule already capture all of the inputs that should affect the cache key.
     return ImmutableList.of();
   }
@@ -101,7 +102,7 @@ public class DexProducedFromJavaLibraryThatContainsClassFiles extends AbstractBu
       throws IOException {
     ImmutableList.Builder<Step> steps = ImmutableList.builder();
 
-    steps.add(new RmStep(getPathToDex().toString(), /* shouldForceDeletion */ true));
+    steps.add(new RmStep(getPathToDex(), /* shouldForceDeletion */ true));
 
     // Make sure that the buck-out/gen/ directory exists for this.buildTarget.
     steps.add(new MkdirStep(getPathToDex().getParent()));
@@ -110,14 +111,14 @@ public class DexProducedFromJavaLibraryThatContainsClassFiles extends AbstractBu
     final boolean hasClassesToDx = !javaLibrary.getClassNamesToHashes().isEmpty();
     final Supplier<Integer> linearAllocEstimate;
     if (hasClassesToDx) {
-      Path pathToOutputFile = Paths.get(javaLibrary.getPathToOutputFile());
+      Path pathToOutputFile = javaLibrary.getPathToOutputFile();
       EstimateLinearAllocStep estimate = new EstimateLinearAllocStep(pathToOutputFile);
       steps.add(estimate);
       linearAllocEstimate = estimate;
 
       // To be conservative, use --force-jumbo for these intermediate .dex files so that they can be
       // merged into a final classes.dex that uses jumbo instructions.
-      DxStep dx = new DxStep(getPathToDex().toString(),
+      DxStep dx = new DxStep(getPathToDex(),
           Collections.singleton(pathToOutputFile),
           EnumSet.of(DxStep.Option.NO_OPTIMIZE, DxStep.Option.FORCE_JUMBO));
       steps.add(dx);
@@ -182,7 +183,7 @@ public class DexProducedFromJavaLibraryThatContainsClassFiles extends AbstractBu
 
   @Override
   @Nullable
-  public String getPathToOutputFile() {
+  public Path getPathToOutputFile() {
     // A .dex file is not guaranteed to be generated, so we return null to be conservative.
     return null;
   }

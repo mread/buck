@@ -31,7 +31,6 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Sets;
 
 import java.nio.file.Path;
 import java.util.Collection;
@@ -135,32 +134,6 @@ public class UberRDotJavaUtil {
         );
   }
 
-  public static Set<HasAndroidResourceDeps> getAndroidResourceDepsUnsorted(Collection<BuildRule> rules) {
-    final Set<HasAndroidResourceDeps> androidResources = Sets.newHashSet();
-    AbstractDependencyVisitor visitor = new AbstractDependencyVisitor(rules) {
-
-      @Override
-      public ImmutableSet<BuildRule> visit(BuildRule rule) {
-        if (rule instanceof HasAndroidResourceDeps) {
-          HasAndroidResourceDeps androidResourceRule = (HasAndroidResourceDeps)rule;
-          if (androidResourceRule.getRes() != null) {
-            androidResources.add(androidResourceRule);
-          }
-        }
-
-        // Only certain types of rules should be considered as part of this traversal.
-        BuildRuleType type = rule.getType();
-        ImmutableSet<BuildRule> depsToVisit = maybeVisitAllDeps(rule,
-            TRAVERSABLE_TYPES.contains(type));
-        return depsToVisit;
-      }
-
-    };
-    visitor.start();
-
-    return androidResources;
-  }
-
   private static Function<BuildRule, HasAndroidResourceDeps> CAST_TO_ANDROID_RESOURCE_RULE =
       new Function<BuildRule, HasAndroidResourceDeps>() {
         @Override
@@ -170,15 +143,15 @@ public class UberRDotJavaUtil {
       };
 
   static JavacInMemoryStep createJavacInMemoryCommandForRDotJavaFiles(
-      Set<String> javaSourceFilePaths, String outputDirectory) {
+      Set<Path> javaSourceFilePaths, Path outputDirectory) {
     return createJavacInMemoryCommandForRDotJavaFiles(
-        javaSourceFilePaths, outputDirectory, Optional.<String>absent());
+        javaSourceFilePaths, outputDirectory, Optional.<Path>absent());
   }
 
   static JavacInMemoryStep createJavacInMemoryCommandForRDotJavaFiles(
-      Set<String> javaSourceFilePaths,
-      String outputDirectory,
-      Optional<String> pathToOutputAbiFile) {
+      Set<Path> javaSourceFilePaths,
+      Path outputDirectory,
+      Optional<Path> pathToOutputAbiFile) {
 
     ImmutableSet<String> classpathEntries = ImmutableSet.of();
     return new JavacInMemoryStep(

@@ -35,6 +35,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.nio.file.Path;
 import java.security.Key;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -57,15 +58,15 @@ public class ApkBuilderStep implements Step {
    */
   private static final String JARSIGNER_KEY_STORE_TYPE = "jks";
 
-  private final String resourceApk;
-  private final String dexFile;
-  private final String pathToOutputApkFile;
+  private final Path resourceApk;
+  private final Path dexFile;
+  private final Path pathToOutputApkFile;
   private final ImmutableSet<String> assetDirectories;
-  private final ImmutableSet<String> nativeLibraryDirectories;
-  private final ImmutableSet<String> zipFiles;
+  private final ImmutableSet<Path> nativeLibraryDirectories;
+  private final ImmutableSet<Path> zipFiles;
   private final ImmutableSet<String> jarFilesThatMayContainResources;
-  private final String pathToKeystore;
-  private final String pathToKeystorePropertiesFile;
+  private final Path pathToKeystore;
+  private final Path pathToKeystorePropertiesFile;
   private final boolean debugMode;
 
   /**
@@ -82,15 +83,15 @@ public class ApkBuilderStep implements Step {
    *     information about the keystore used to sign the APK.
    */
   public ApkBuilderStep(
-      String resourceApk,
-      String pathToOutputApkFile,
-      String dexFile,
+      Path resourceApk,
+      Path pathToOutputApkFile,
+      Path dexFile,
       ImmutableSet<String> javaResourcesDirectories,
-      ImmutableSet<String> nativeLibraryDirectories,
-      ImmutableSet<String> zipFiles,
+      ImmutableSet<Path> nativeLibraryDirectories,
+      ImmutableSet<Path> zipFiles,
       ImmutableSet<String> jarFilesThatMayContainResources,
-      String pathToKeystore,
-      String pathToKeystorePropertiesFile,
+      Path pathToKeystore,
+      Path pathToKeystorePropertiesFile,
       boolean debugMode) {
     this.resourceApk = Preconditions.checkNotNull(resourceApk);
     this.pathToOutputApkFile = Preconditions.checkNotNull(pathToOutputApkFile);
@@ -123,13 +124,13 @@ public class ApkBuilderStep implements Step {
           privateKeyAndCertificate.certificate,
           output);
       builder.setDebugMode(debugMode);
-      for (String nativeLibraryDirectory : nativeLibraryDirectories) {
+      for (Path nativeLibraryDirectory : nativeLibraryDirectories) {
         builder.addNativeLibraries(projectFilesystem.getFileForRelativePath(nativeLibraryDirectory));
       }
       for (String assetDirectory : assetDirectories) {
         builder.addSourceFolder(projectFilesystem.getFileForRelativePath(assetDirectory));
       }
-      for (String zipFile : zipFiles) {
+      for (Path zipFile : zipFiles) {
         File zipFileOnDisk = projectFilesystem.getFileForRelativePath(zipFile);
         if (zipFileOnDisk.exists() && zipFileOnDisk.isFile()) {
           builder.addZipFile(zipFileOnDisk);
@@ -198,9 +199,9 @@ public class ApkBuilderStep implements Step {
         "com.android.sdklib.build.ApkBuilderMain",
         pathToOutputApkFile,
         Joiner.on(' ').join(Iterables.transform(nativeLibraryDirectories,
-            new Function<String, String>() {
+            new Function<Path, String>() {
               @Override
-              public String apply(String s) {
+              public String apply(Path s) {
                 return "-nf " + s;
               }
             })),

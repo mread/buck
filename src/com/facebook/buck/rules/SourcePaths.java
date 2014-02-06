@@ -16,15 +16,30 @@
 
 package com.facebook.buck.rules;
 
+import com.facebook.buck.util.MorePaths;
 import com.google.common.base.Function;
+import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Ordering;
 
 import java.nio.file.Path;
+import java.util.Collection;
+
+import javax.annotation.Nullable;
 
 /**
  * Utilities for dealing with {@link SourcePath}s.
  */
 public class SourcePaths {
+
+  public static final Function<Path, SourcePath> TO_SOURCE_PATH =
+      new Function<Path, SourcePath>() {
+        @Override
+        public SourcePath apply(Path input) {
+          return new FileSourcePath(input.toString());
+        }
+      };
 
   /** Utility class: do not instantiate. */
   private SourcePaths() {}
@@ -33,7 +48,7 @@ public class SourcePaths {
    * Takes an {@link Iterable} of {@link SourcePath} objects and filters those that are suitable to
    * be returned by {@link Buildable#getInputsToCompareToOutput()}.
    */
-  public static Iterable<String> filterInputsToCompareToOutput(
+  public static Collection<Path> filterInputsToCompareToOutput(
       Iterable<? extends SourcePath> sources) {
     // Currently, the only implementation of SourcePath that should be included in the Iterable
     // returned by getInputsToCompareToOutput() is FileSourcePath, so it is safe to filter by that
@@ -41,9 +56,11 @@ public class SourcePaths {
     //
     // BuildTargetSourcePath should not be included in the output because it refers to a generated
     // file, and generated files are not hashed as part of a RuleKey.
-    return Iterables.transform(
-        Iterables.filter(sources, FileSourcePath.class),
-        SourcePath.TO_REFERENCE);
+    return FluentIterable.from(sources)
+        .filter(FileSourcePath.class)
+        .transform(SourcePath.TO_REFERENCE)
+        .transform(MorePaths.TO_PATH)
+        .toList();
   }
 
   public static Iterable<Path> toPaths(Iterable<SourcePath> sourcePaths,
@@ -55,5 +72,16 @@ public class SourcePaths {
       }
     };
     return Iterables.transform(sourcePaths, transform);
+  }
+
+  public static ImmutableSortedSet<SourcePath> toSourcePathsSortedByNaturalOrder(
+      @Nullable Iterable<Path> paths) {
+    if (paths == null) {
+      return ImmutableSortedSet.of();
+    }
+
+    return FluentIterable.from(paths)
+        .transform(TO_SOURCE_PATH)
+        .toSortedSet(Ordering.natural());
   }
 }

@@ -21,11 +21,11 @@ import static com.facebook.buck.rules.BuildableProperties.Kind.LIBRARY;
 import static com.facebook.buck.rules.BuildableProperties.Kind.TEST;
 
 import com.facebook.buck.java.AnnotationProcessingParams;
-import com.facebook.buck.java.JavaLibraryRule;
 import com.facebook.buck.java.JavaTestRule;
 import com.facebook.buck.java.JavacOptions;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
+import com.facebook.buck.rules.BuildRule;
 import com.facebook.buck.rules.BuildRuleParams;
 import com.facebook.buck.rules.BuildRuleResolver;
 import com.facebook.buck.rules.BuildRuleType;
@@ -42,6 +42,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -57,24 +59,24 @@ public class RobolectricTestRule extends JavaTestRule {
   final static String LIST_OF_RESOURCE_DIRECTORIES_PROPERTY_NAME =
       "buck.robolectric_res_directories";
 
-  private final static Function<HasAndroidResourceDeps, String> RESOURCE_DIRECTORY_FUNCTION =
-      new Function<HasAndroidResourceDeps, String>() {
+  private final static Function<HasAndroidResourceDeps, Path> RESOURCE_DIRECTORY_FUNCTION =
+      new Function<HasAndroidResourceDeps, Path>() {
     @Override
-    public String apply(HasAndroidResourceDeps input) {
+    public Path apply(HasAndroidResourceDeps input) {
       return input.getRes();
     }
   };
 
   protected RobolectricTestRule(BuildRuleParams buildRuleParams,
-      Set<String> srcs,
+      Set<Path> srcs,
       Set<SourcePath> resources,
       Optional<DummyRDotJava> optionalDummyRDotJava,
       Set<String> labels,
       Set<String> contacts,
-      Optional<String> proguardConfig,
+      Optional<Path> proguardConfig,
       JavacOptions javacOptions,
       List<String> vmArgs,
-      ImmutableSet<JavaLibraryRule> sourceUnderTest) {
+      ImmutableSet<BuildRule> sourceUnderTest) {
     super(buildRuleParams,
         srcs,
         resources,
@@ -98,7 +100,7 @@ public class RobolectricTestRule extends JavaTestRule {
   }
 
   @Override
-  public List<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     return super.getInputsToCompareToOutput();
   }
 
@@ -135,7 +137,7 @@ public class RobolectricTestRule extends JavaTestRule {
 
     @Override
     public RobolectricTestRule build(BuildRuleResolver ruleResolver) {
-      ImmutableSet<JavaLibraryRule> sourceUnderTest = generateSourceUnderTest(sourcesUnderTest,
+      ImmutableSet<BuildRule> sourceUnderTest = generateSourceUnderTest(sourcesUnderTest,
           ruleResolver);
 
       ImmutableList.Builder<String> allVmArgs = ImmutableList.builder();

@@ -22,6 +22,8 @@ import com.facebook.buck.parser.NoSuchBuildTargetException;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
 import com.google.common.base.Optional;
 
+import java.nio.file.Path;
+
 public class AndroidResourceBuildRuleFactory extends AbstractBuildRuleFactory<AndroidResourceRule.Builder> {
 
   @Override
@@ -39,13 +41,13 @@ public class AndroidResourceBuildRuleFactory extends AbstractBuildRuleFactory<An
       // if (!buildDirectory.equals(res.getParentFile())) {
       //   throw new RuntimeException(res + " is not an immediate child of " + buildDirectory);
       // }
-      String resDir = params.resolveDirectoryPathRelativeToBuildFileDirectory(res.get());
+      Path resDir = params.resolveDirectoryPathRelativeToBuildFileDirectory(res.get());
       builder.setRes(resDir);
     }
 
     // res_srcs
     for (String resSrc : params.getOptionalListAttribute("res_srcs")) {
-      String relativePath = params.resolveFilePathRelativeToBuildFileDirectory(resSrc);
+      Path relativePath = params.resolveFilePathRelativeToBuildFileDirectory(resSrc);
       builder.addResSrc(relativePath);
     }
 
@@ -58,20 +60,20 @@ public class AndroidResourceBuildRuleFactory extends AbstractBuildRuleFactory<An
     // assets
     Optional<String> assets = params.getOptionalStringAttribute("assets");
     if (assets.isPresent()) {
-      String assetsDir = params.resolveDirectoryPathRelativeToBuildFileDirectory(assets.get());
+      Path assetsDir = params.resolveDirectoryPathRelativeToBuildFileDirectory(assets.get());
       builder.setAssetsDirectory(assetsDir);
     }
 
     // assets_srcs
     for (String assetsSrc : params.getOptionalListAttribute("assets_srcs")) {
-      String relativePath = params.resolveFilePathRelativeToBuildFileDirectory(assetsSrc);
+      Path relativePath = params.resolveFilePathRelativeToBuildFileDirectory(assetsSrc);
       builder.addAssetsSrc(relativePath);
     }
 
     // manifest
     Optional<String> manifestFile = params.getOptionalStringAttribute("manifest");
     if (manifestFile.isPresent()) {
-      String manifestFilePath = params.resolveFilePathRelativeToBuildFileDirectory(
+      Path manifestFilePath = params.resolveFilePathRelativeToBuildFileDirectory(
           manifestFile.get());
       builder.setManifestFile(manifestFilePath);
     }

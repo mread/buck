@@ -38,14 +38,20 @@ import com.facebook.buck.step.fs.MkdirStep;
 import com.facebook.buck.util.BuckConstant;
 import com.facebook.buck.util.DefaultDirectoryTraverser;
 import com.facebook.buck.util.DirectoryTraverser;
+import com.facebook.buck.util.MorePaths;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Iterables;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -59,18 +65,18 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
   private final String mainClass;
 
   @Nullable
-  private final String manifestFile;
+  private final Path manifestFile;
 
   @Nullable
-  private final String metaInfDirectory;
+  private final Path metaInfDirectory;
 
   private final DirectoryTraverser directoryTraverser;
 
   JavaBinaryRule(
       BuildRuleParams buildRuleParams,
       @Nullable String mainClass,
-      @Nullable String manifestFile,
-      @Nullable String metaInfDirectory,
+      @Nullable Path manifestFile,
+      @Nullable Path metaInfDirectory,
       DirectoryTraverser directoryTraverser) {
     super(buildRuleParams);
     this.mainClass = mainClass;
@@ -80,19 +86,10 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
     this.directoryTraverser = Preconditions.checkNotNull(directoryTraverser);
   }
 
-  private void addMetaInfContents(ImmutableSortedSet.Builder<String> files) {
-    Buildables.addInputsToSortedSet(metaInfDirectory, files, directoryTraverser);
-  }
-
   @Override
   public RuleKey.Builder appendToRuleKey(RuleKey.Builder builder) throws IOException {
-    ImmutableSortedSet.Builder<String> metaInfFiles = ImmutableSortedSet.naturalOrder();
-    addMetaInfContents(metaInfFiles);
-
     return super.appendToRuleKey(builder)
-        .set("mainClass", mainClass)
-        .set("manifestFile", manifestFile)
-        .set("metaInfDirectory", metaInfFiles.build());
+        .set("mainClass", mainClass);
   }
 
   @Override
@@ -106,15 +103,15 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     // Build a sorted set so that metaInfDirectory contents are listed in a canonical order.
-    ImmutableSortedSet.Builder<String> builder = ImmutableSortedSet.naturalOrder();
+    ImmutableSortedSet.Builder<Path> builder = ImmutableSortedSet.naturalOrder();
 
     if (manifestFile != null) {
       builder.add(manifestFile);
     }
 
-    addMetaInfContents(builder);
+    Buildables.addInputsToSortedSet(metaInfDirectory, builder, directoryTraverser);
 
     return builder.build();
   }
@@ -123,14 +120,14 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
   public List<Step> getBuildSteps(BuildContext context, BuildableContext buildableContext) throws IOException {
     ImmutableList.Builder<Step> commands = ImmutableList.builder();
 
-    String outputDirectory = getOutputDirectory();
+    Path outputDirectory = getOutputDirectory();
     Step mkdir = new MkdirStep(outputDirectory);
     commands.add(mkdir);
 
-    ImmutableSet<String> includePaths;
+    ImmutableSet<Path> includePaths;
     if (metaInfDirectory != null) {
-      String stagingRoot = outputDirectory + "/meta_inf_staging";
-      String stagingTarget = stagingRoot + "/META-INF";
+      Path stagingRoot = outputDirectory.resolve("meta_inf_staging");
+      Path stagingTarget = stagingRoot.resolve("META-INF");
 
       MakeCleanDirectoryStep createStagingRoot = new MakeCleanDirectoryStep(stagingRoot);
       commands.add(createStagingRoot);
@@ -139,15 +136,17 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
           metaInfDirectory, stagingTarget);
       commands.add(link);
 
-      includePaths = ImmutableSet.<String>builder()
+      includePaths = ImmutableSet.<Path>builder()
           .add(stagingRoot)
-          .addAll(getTransitiveClasspathEntries().values())
+          .addAll(Iterables.transform(getTransitiveClasspathEntries().values(), MorePaths.TO_PATH))
           .build();
     } else {
-      includePaths = ImmutableSet.copyOf(getTransitiveClasspathEntries().values());
+      includePaths = FluentIterable.from(getTransitiveClasspathEntries().values())
+          .transform(MorePaths.TO_PATH)
+          .toSet();
     }
 
-    String outputFile = getOutputFile();
+    Path outputFile = getOutputFile();
     Step jar = new JarDirectoryStep(outputFile, includePaths, mainClass, manifestFile);
     commands.add(jar);
 
@@ -159,17 +158,18 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
     return Classpaths.getClasspathEntries(getDeps());
   }
 
-  private String getOutputDirectory() {
-    return String.format("%s/%s", BuckConstant.GEN_DIR, getBuildTarget().getBasePath());
+  private Path getOutputDirectory() {
+    return Paths.get(String.format("%s/%s", BuckConstant.GEN_DIR, getBuildTarget().getBasePath()));
   }
 
   @Override
-  public String getPathToOutputFile() {
+  public Path getPathToOutputFile() {
     return getOutputFile();
   }
 
-  String getOutputFile() {
-    return String.format("%s/%s.jar", getOutputDirectory(), getBuildTarget().getShortName());
+  Path getOutputFile() {
+    return Paths.get(
+        String.format("%s/%s.jar", getOutputDirectory(), getBuildTarget().getShortName()));
   }
 
   public static Builder newJavaBinaryRuleBuilder(AbstractBuildRuleBuilderParams params) {
@@ -183,14 +183,14 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
         getBuildTarget().getFullyQualifiedName());
 
     return ImmutableList.of("java", "-jar",
-        projectFilesystem.getPathRelativizer().apply(getOutputFile()).toString());
+        projectFilesystem.getAbsolutifier().apply(getOutputFile()).toString());
   }
 
   public static class Builder extends AbstractBuildRuleBuilder<JavaBinaryRule> {
 
     private String mainClass;
-    private String manifestFile;
-    private String metaInfDirectory;
+    private Path manifestFile;
+    private Path metaInfDirectory;
 
     private Builder(AbstractBuildRuleBuilderParams params) {
       super(params);
@@ -222,12 +222,12 @@ public class JavaBinaryRule extends DoNotUseAbstractBuildable implements BinaryB
       return this;
     }
 
-    public Builder setManifest(String manifestFile) {
+    public Builder setManifest(Path manifestFile) {
       this.manifestFile = manifestFile;
       return this;
     }
 
-    public Builder setMetaInfDirectory(String metaInfDirectory) {
+    public Builder setMetaInfDirectory(Path metaInfDirectory) {
       this.metaInfDirectory = metaInfDirectory;
       return this;
     }

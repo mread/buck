@@ -19,16 +19,13 @@ package com.facebook.buck.rules;
 import com.facebook.buck.event.BuckEventBus;
 import com.facebook.buck.event.LogEvent;
 import com.facebook.buck.step.Step;
-import com.facebook.buck.step.StepFailedException;
 import com.facebook.buck.step.StepRunner;
-import com.facebook.buck.util.MorePaths;
 import com.facebook.buck.util.concurrent.MoreFutures;
 import com.facebook.buck.zip.Unzip;
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import com.google.common.base.Throwables;
@@ -41,7 +38,6 @@ import com.google.common.util.concurrent.SettableFuture;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -54,23 +50,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Beta
 public abstract class AbstractCachingBuildRule extends AbstractBuildRule implements BuildRule {
-
-  /**
-   * This {@link Predicate} returns {@code true} if none of the {@link BuildRuleSuccess} objects
-   * are built locally.
-   */
-  private static final Predicate<List<BuildRuleSuccess>> RULES_NOT_BUILT_LOCALLY_PREDICATE =
-      new Predicate<List<BuildRuleSuccess>>() {
-        @Override
-        public boolean apply(List<BuildRuleSuccess> ruleSuccesses) {
-          for (BuildRuleSuccess success : ruleSuccesses) {
-            if (success.getType() == BuildRuleSuccess.Type.BUILT_LOCALLY) {
-              return false;
-            }
-          }
-          return true;
-        }
-      };
 
   private final Buildable buildable;
 
@@ -125,8 +104,7 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
   @Override
   public Iterable<Path> getInputs() {
     if (inputsToCompareToOutputs == null) {
-      inputsToCompareToOutputs = MorePaths.asPaths(
-          buildable.getInputsToCompareToOutput());
+      inputsToCompareToOutputs = buildable.getInputsToCompareToOutput();
     }
     return inputsToCompareToOutputs;
   }
@@ -137,8 +115,11 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
     // not. Here, the inputs are specified as InputRules, which means that the _contents_ of the
     // files will be hashed. In the case of .set("srcs", srcs), the list of strings itself will be
     // hashed. It turns out that we need both of these in order to construct a RuleKey correctly.
+    // Note: appendToRuleKey() should not set("srcs", srcs) if the inputs are order-independent.
+    Iterable<Path> inputs = getInputs();
     builder = super.appendToRuleKey(builder)
-        .setInputs("buck.inputs", getInputs().iterator());
+        .setInputs("buck.inputs", inputs.iterator())
+        .setSourcePaths("buck.sourcepaths", SourcePaths.toSourcePathsSortedByNaturalOrder(inputs));
     // TODO(simons): Rename this when no Buildables extend this class.
     return buildable.appendDetailsToRuleKey(builder);
   }
@@ -217,11 +198,12 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
               // Record the start of the build.
               eventBus.post(BuildRuleEvent.started(AbstractCachingBuildRule.this));
               startOfBuildWasRecordedOnTheEventBus = true;
-              boolean shouldTryToFetchFromCache = RULES_NOT_BUILT_LOCALLY_PREDICATE.apply(deps);
 
               try {
-                BuildResult result = buildOnceDepsAreBuilt(
-                    context, onDiskBuildInfo, buildInfoRecorder.get(), shouldTryToFetchFromCache);
+                BuildResult result = buildOnceDepsAreBuilt(context,
+                    onDiskBuildInfo,
+                    buildInfoRecorder.get(),
+                    shouldTryToFetchFromCache(deps));
                 if (result.getStatus() == BuildRuleStatus.SUCCESS) {
                   recordBuildRuleSuccess(result);
                 } else {
@@ -247,10 +229,7 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
 
               // Do the post to the event bus immediately after the future is set so that the
               // build time measurement is as accurate as possible.
-              eventBus.post(BuildRuleEvent.finished(AbstractCachingBuildRule.this,
-                  result.getStatus(),
-                  result.getCacheResult(),
-                  Optional.of(result.getSuccess())));
+              logBuildRuleFinished(result);
 
               // Finally, upload to the artifact cache.
               if (result.getSuccess().shouldUploadResultingArtifact()) {
@@ -271,16 +250,20 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
               // Note that startOfBuildWasRecordedOnTheEventBus will be false if onSuccess() was
               // never invoked.
               if (startOfBuildWasRecordedOnTheEventBus) {
-                eventBus.post(BuildRuleEvent.finished(AbstractCachingBuildRule.this,
-                    result.getStatus(),
-                    result.getCacheResult(),
-                    Optional.<BuildRuleSuccess.Type>absent()));
+                logBuildRuleFinished(result);
               }
 
               // It seems possible (albeit unlikely) that something could go wrong in
               // recordBuildRuleSuccess() after buildRuleResult has been resolved such that Buck
               // would attempt to resolve the future again, which would fail.
               buildRuleResult.setException(result.getFailure());
+            }
+
+            private void logBuildRuleFinished(BuildResult result) {
+              eventBus.post(BuildRuleEvent.finished(AbstractCachingBuildRule.this,
+                  result.getStatus(),
+                  result.getCacheResult(),
+                  Optional.fromNullable(result.getSuccess())));
             }
           },
           context.getExecutor());
@@ -292,6 +275,18 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
     }
 
     return buildRuleResult;
+  }
+
+  /**
+   * Returns {@code true} if none of the {@link BuildRuleSuccess} objects are built locally.
+   */
+  private static boolean shouldTryToFetchFromCache(List<BuildRuleSuccess> ruleSuccesses) {
+    for (BuildRuleSuccess success : ruleSuccesses) {
+      if (success.getType() == BuildRuleSuccess.Type.BUILT_LOCALLY) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @VisibleForTesting
@@ -417,7 +412,7 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
           context.getProjectRoot(),
           context);
     } else {
-      cacheResult = CacheResult.MISS;
+      cacheResult = CacheResult.SKIP;
     }
 
     // Run the steps to build this rule since it was not found in the cache.
@@ -428,7 +423,7 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
     // The only remaining option is to build locally.
     try {
       executeCommandsNowThatDepsAreBuilt(context, onDiskBuildInfo, buildInfoRecorder);
-    } catch (IOException | StepFailedException e) {
+    } catch (Exception e) {
       return new BuildResult(e);
     }
 
@@ -437,13 +432,12 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
     // TODO(mbolin): Buildable.getSteps() should use BuildableContext such that Buildable is
     // responsible for invoking recordArtifact() itself. Once that is done, this call to
     // recordArtifact() should be deleted.
-    String pathToOutputFile = buildable.getPathToOutputFile();
+    Path pathToOutputFile = buildable.getPathToOutputFile();
     if (pathToOutputFile != null) {
-      Path pathToArtifact = Paths.get(pathToOutputFile);
-      buildInfoRecorder.recordArtifact(pathToArtifact);
+      buildInfoRecorder.recordArtifact(pathToOutputFile);
     }
 
-    return new BuildResult(BuildRuleSuccess.Type.BUILT_LOCALLY, CacheResult.MISS);
+    return new BuildResult(BuildRuleSuccess.Type.BUILT_LOCALLY, cacheResult);
   }
 
   private CacheResult tryToFetchArtifactFromBuildCacheAndOverlayOnTopOfProjectFilesystem(
@@ -510,7 +504,7 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
   private void executeCommandsNowThatDepsAreBuilt(BuildContext context,
       OnDiskBuildInfo onDiskBuildInfo,
       BuildInfoRecorder buildInfoRecorder)
-      throws IOException, StepFailedException {
+      throws Exception {
     context.logBuildInfo("[BUILDING %s]", getFullyQualifiedName());
 
     // Get and run all of the commands.

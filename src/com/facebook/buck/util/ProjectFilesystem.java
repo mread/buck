@@ -33,9 +33,11 @@ import com.google.common.io.InputSupplier;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.FileVisitor;
 import java.nio.file.LinkOption;
@@ -63,7 +65,6 @@ public class ProjectFilesystem {
   // the Function<String, String> can go away, as Function<Path, Path> should be used exclusively.
 
   private final Function<Path, Path> pathAbsolutifier;
-  private final Function<String, Path> pathRelativizer;
 
   private final ImmutableSet<Path> ignorePaths;
 
@@ -85,12 +86,6 @@ public class ProjectFilesystem {
         return resolve(path);
       }
     };
-    this.pathRelativizer = new Function<String, Path>() {
-      @Override
-      public Path apply(String relativePath) {
-        return MorePaths.absolutify(getFileForRelativePath(relativePath).toPath());
-      }
-    };
     this.ignorePaths = MorePaths.filterForSubpaths(ignorePaths, this.pathToRoot);
   }
 
@@ -106,7 +101,7 @@ public class ProjectFilesystem {
    * @return the specified {@code path} resolved against {@link #getRootPath()} to an absolute path.
    */
   public Path resolve(Path path) {
-    return pathToRoot.resolve(path).toAbsolutePath();
+    return pathToRoot.resolve(path).toAbsolutePath().normalize();
   }
 
   /**
@@ -139,6 +134,10 @@ public class ProjectFilesystem {
   }
 
   public boolean exists(String pathRelativeToProjectRoot) {
+    return exists(Paths.get(pathRelativeToProjectRoot));
+  }
+
+  public boolean exists(Path pathRelativeToProjectRoot) {
     return getFileForRelativePath(pathRelativeToProjectRoot).exists();
   }
 
@@ -156,11 +155,11 @@ public class ProjectFilesystem {
    * @param pathRelativeToProjectRoot path to the file
    * @return true if the file was successfully deleted, false otherwise
    */
-  public boolean deleteFileAtPath(String pathRelativeToProjectRoot) {
+  public boolean deleteFileAtPath(Path pathRelativeToProjectRoot) {
     return getFileForRelativePath(pathRelativeToProjectRoot).delete();
   }
 
-  public Properties readPropertiesFile(String pathToPropertiesFileRelativeToProjectRoot)
+  public Properties readPropertiesFile(Path pathToPropertiesFileRelativeToProjectRoot)
       throws IOException {
     Properties properties = new Properties();
     File propertiesFile = getFileForRelativePath(pathToPropertiesFileRelativeToProjectRoot);
@@ -192,15 +191,8 @@ public class ProjectFilesystem {
   /**
    * Allows {@link java.io.File#listFiles} to be faked in tests.
    */
-  public File[] listFiles(String pathRelativeToProjectRoot) {
+  public File[] listFiles(Path pathRelativeToProjectRoot) {
     return getFileForRelativePath(pathRelativeToProjectRoot).listFiles();
-  }
-
-  /**
-   * Recursively delete everything under the specified path.
-   */
-  public void rmdir(String path) throws IOException {
-    MoreFiles.rmdir(pathRelativizer.apply(path));
   }
 
   /**
@@ -295,6 +287,23 @@ public class ProjectFilesystem {
   }
 
   /**
+   * Attempts to open the file for future read access. Returns {@link Optional#absent()} if the file
+   * does not exist.
+   */
+  public Optional<Reader> getReaderIfFileExists(Path pathRelativeToProjectRoot) {
+    File fileToRead = getFileForRelativePath(pathRelativeToProjectRoot);
+    if (fileToRead.isFile()) {
+      try {
+        return Optional.of((Reader) new FileReader(fileToRead));
+      } catch (Exception e) {
+        throw new RuntimeException("Error reading " + pathRelativeToProjectRoot, e);
+      }
+    } else {
+      return Optional.absent();
+    }
+  }
+
+  /**
    * Attempts to read the first line of the file specified by the relative path. If the file does
    * not exist, is empty, or encounters an error while being read, {@link Optional#absent()} is
    * returned. Otherwise, an {@link Optional} with the first line of the file will be returned.
@@ -334,7 +343,7 @@ public class ProjectFilesystem {
     return Files.readLines(file, Charsets.UTF_8);
   }
 
-  public InputSupplier<? extends InputStream> getInputSupplierForRelativePath(String path) {
+  public InputSupplier<? extends InputStream> getInputSupplierForRelativePath(Path path) {
     File file = getFileForRelativePath(path);
     return Files.newInputStreamSupplier(file);
   }
@@ -342,16 +351,6 @@ public class ProjectFilesystem {
   public String computeSha1(Path pathRelativeToProjectRoot) throws IOException {
     File fileToHash = getFileForRelativePath(pathRelativeToProjectRoot);
     return Files.hash(fileToHash, Hashing.sha1()).toString();
-  }
-
-  /**
-   * @return a function that takes a path relative to the project root and resolves it to an
-   *     absolute path. This is particularly useful for {@link com.facebook.buck.step.Step}s that do
-   *     not extend {@link com.facebook.buck.shell.ShellStep} because they are not guaranteed to be
-   *     run from the project root.
-   */
-  public Function<String, Path> getPathRelativizer() {
-    return pathRelativizer;
   }
 
   /**

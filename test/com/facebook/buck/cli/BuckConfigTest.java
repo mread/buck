@@ -26,7 +26,7 @@ import com.facebook.buck.model.BuildTargetFactory;
 import com.facebook.buck.parser.BuildTargetParser;
 import com.facebook.buck.parser.NoSuchBuildTargetException;
 import com.facebook.buck.parser.ParseContext;
-import com.facebook.buck.testutil.IdentityPathRelativizer;
+import com.facebook.buck.testutil.IdentityPathAbsolutifier;
 import com.facebook.buck.testutil.integration.DebuggableTemporaryFolder;
 import com.facebook.buck.testutil.integration.ProjectWorkspace;
 import com.facebook.buck.testutil.integration.ProjectWorkspace.ProcessResult;
@@ -339,8 +339,8 @@ public class BuckConfigTest {
   @Test
   public void testIgnorePaths() throws IOException {
     ProjectFilesystem filesystem = EasyMock.createMock(ProjectFilesystem.class);
-    EasyMock.expect(filesystem.getPathRelativizer())
-        .andReturn(IdentityPathRelativizer.getIdentityRelativizer())
+    EasyMock.expect(filesystem.getAbsolutifier())
+        .andReturn(IdentityPathAbsolutifier.getIdentityAbsolutifier())
         .times(2);
     BuildTargetParser parser = EasyMock.createMock(BuildTargetParser.class);
     EasyMock.replay(filesystem, parser);
@@ -370,8 +370,8 @@ public class BuckConfigTest {
   @Test
   public void testIgnorePathsWithRelativeCacheDir() throws IOException {
     ProjectFilesystem filesystem = EasyMock.createMock(ProjectFilesystem.class);
-    EasyMock.expect(filesystem.getPathRelativizer())
-        .andReturn(IdentityPathRelativizer.getIdentityRelativizer());
+    EasyMock.expect(filesystem.getAbsolutifier())
+        .andReturn(IdentityPathAbsolutifier.getIdentityAbsolutifier());
     BuildTargetParser parser = EasyMock.createMock(BuildTargetParser.class);
     EasyMock.replay(filesystem, parser);
 
@@ -463,6 +463,56 @@ public class BuckConfigTest {
     // We don't test "auto" on Linux, because the behavior would depend on how the test was run.
     assertTrue(linuxConfig.createAnsi(Optional.of("always")).isAnsiTerminal());
     assertFalse(linuxConfig.createAnsi(Optional.of("never")).isAnsiTerminal());
+  }
+
+  @Test
+  public void whenJavacIsNotSetThenAbsentIsReturned() throws IOException {
+    assertEquals(Optional.absent(), new FakeBuckConfig().getJavac());
+  }
+
+  @Test
+  public void whenJavacExistsAndIsExecutableThenCorrectPathIsReturned() throws IOException {
+    File javac = temporaryFolder.newFile();
+    javac.setExecutable(true);
+
+    Reader reader = new StringReader(Joiner.on('\n').join(
+        "[tools]",
+        "    javac = " + javac.toPath().toString()));
+    BuckConfig config = createWithDefaultFilesystem(reader, null);
+
+    assertEquals(Optional.of(javac.toPath()), config.getJavac());
+  }
+
+  @Test
+  public void whenJavacDoesNotExistThenHumanReadableExceptionIsThrown() throws IOException {
+    String invalidPath = temporaryFolder.getRoot().getAbsolutePath() + "DoesNotExist";
+    Reader reader = new StringReader(Joiner.on('\n').join(
+        "[tools]",
+        "    javac = " + invalidPath));
+    BuckConfig config = createWithDefaultFilesystem(reader, null);
+    try {
+      config.getJavac();
+      fail("Should throw exception as javac file does not exist.");
+    } catch (HumanReadableException e) {
+      assertEquals(e.getHumanReadableErrorMessage(), "Javac does not exist: " + invalidPath);
+    }
+  }
+
+  @Test
+  public void whenJavacIsNotExecutableThenHumanReadableExeceptionIsThrown() throws IOException {
+    File javac = temporaryFolder.newFile();
+    javac.setExecutable(false);
+
+    Reader reader = new StringReader(Joiner.on('\n').join(
+        "[tools]",
+        "    javac = " + javac.toPath().toString()));
+    BuckConfig config = createWithDefaultFilesystem(reader, null);
+    try {
+      config.getJavac();
+      fail("Should throw exception as javac file is not executable.");
+    } catch (HumanReadableException e) {
+      assertEquals(e.getHumanReadableErrorMessage(), "Javac is not executable: " + javac.getPath());
+    }
   }
 
   @Test

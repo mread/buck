@@ -17,10 +17,12 @@
 package com.facebook.buck.rules;
 
 import static com.facebook.buck.event.TestEventConfigerator.configureTestEvent;
+import static com.facebook.buck.rules.BuildRuleEvent.Finished;
 import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.eq;
 import static org.easymock.EasyMock.expect;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.facebook.buck.event.BuckEvent;
@@ -67,6 +69,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -150,6 +153,13 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
         .putBytes("buck.inputs".getBytes())
         .putByte(RuleKey.Builder.SEPARATOR)
         .putBytes("ae8c0f860a0ecad94ecede79b69460434eddbfbc".getBytes())
+        .putByte(RuleKey.Builder.SEPARATOR)
+        .putByte(RuleKey.Builder.SEPARATOR)
+
+        .putByte(RuleKey.Builder.SEPARATOR)
+        .putBytes("buck.sourcepaths".getBytes())
+        .putByte(RuleKey.Builder.SEPARATOR)
+        .putBytes("/dev/null".getBytes())
         .putByte(RuleKey.Builder.SEPARATOR)
         .putByte(RuleKey.Builder.SEPARATOR)
 
@@ -261,6 +271,10 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
         throw new RuntimeException("Artifact cache must not be accessed while building the rule.");
       }
     };
+
+    BuckEventBus eventBus = BuckEventBusFactory.newInstance();
+    FakeBuckEventListener listener = new FakeBuckEventListener();
+    eventBus.register(listener);
     BuildContext buildContext = FakeBuildContext.newBuilder(new FakeProjectFilesystem())
         .setDependencyGraph(new DependencyGraph(new MutableDirectedGraph<BuildRule>()))
         .setJavaPackageFinder(new JavaPackageFinder() {
@@ -275,11 +289,21 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
           }
         })
         .setArtifactCache(artifactCache)
+        .setEventBus(eventBus)
         .build();
 
     BuildRuleSuccess result = cachingBuildRule.build(buildContext).get();
     assertEquals(result.getType(), BuildRuleSuccess.Type.BUILT_LOCALLY);
     MoreAsserts.assertListEquals(Lists.newArrayList("Step was executed."), strings);
+
+    Finished finishedEvent = null;
+    for (BuckEvent event : listener.getEvents()) {
+      if (event instanceof Finished) {
+        finishedEvent = (Finished) event;
+      }
+    }
+    assertNotNull("BuildRule did not fire a BuildRuleEvent.Finished event.", finishedEvent);
+    assertEquals(CacheResult.SKIP, finishedEvent.getCacheResult());
   }
 
    /**
@@ -483,7 +507,7 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
       implements InitializableFromDisk<Object> {
 
     private final Iterable<Path> inputs;
-    private final String pathToOutputFile;
+    private final Path pathToOutputFile;
     private final List<Step> buildSteps;
 
     @Nullable
@@ -496,7 +520,7 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
         List<Step> buildSteps) {
       super(params);
       this.inputs = inputs;
-      this.pathToOutputFile = pathToOutputFile;
+      this.pathToOutputFile = pathToOutputFile == null ? null : Paths.get(pathToOutputFile);
       this.buildSteps = buildSteps;
     }
 
@@ -512,7 +536,7 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
 
     @Override
     @Nullable
-    public String getPathToOutputFile() {
+    public Path getPathToOutputFile() {
       return pathToOutputFile;
     }
 
@@ -523,7 +547,7 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
     }
 
     @Override
-    public Iterable<String> getInputsToCompareToOutput() {
+    public Collection<Path> getInputsToCompareToOutput() {
       throw new UnsupportedOperationException();
     }
 
@@ -574,7 +598,7 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
     }
 
     @Override
-    public Iterable<String> getInputsToCompareToOutput() {
+    public Collection<Path> getInputsToCompareToOutput() {
       throw new UnsupportedOperationException("method should not be called");
     }
 

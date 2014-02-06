@@ -44,7 +44,7 @@ import javax.annotation.Nullable;
  * A set of parameters passed to a {@link BuildRuleFactory}.
  */
 public final class BuildRuleFactoryParams {
-  static final String GENFILE_PREFIX = "BUCKGEN:";
+  public static final String GENFILE_PREFIX = "BUCKGEN:";
 
   private final Map<String, ?> instance;
   private final ProjectFilesystem filesystem;
@@ -53,11 +53,10 @@ public final class BuildRuleFactoryParams {
   public final BuildTargetPatternParser buildTargetPatternParser;
   public final BuildTarget target;
   private final ParseContext buildFileParseContext;
-  private final ParseContext visibilityParseContext;
   private final boolean ignoreFileExistenceChecks;
   private final AbstractBuildRuleBuilderParams abstractBuildRuleFactoryParams;
 
-  private final Function<String, String> resolveFilePathRelativeToBuildFileDirectoryTransform;
+  private final Function<String, Path> resolveFilePathRelativeToBuildFileDirectoryTransform;
 
   public BuildRuleFactoryParams(
       Map<String, ?> instance,
@@ -90,13 +89,12 @@ public final class BuildRuleFactoryParams {
     this.buildTargetParser = buildTargetParser;
     this.buildTargetPatternParser = new BuildTargetPatternParser(filesystem);
     this.target = Preconditions.checkNotNull(target);
-    this.visibilityParseContext = ParseContext.forVisibilityArgument();
     this.buildFileParseContext = ParseContext.forBaseName(target.getBaseName());
     this.ignoreFileExistenceChecks = ignoreFileExistenceChecks;
 
-    this.resolveFilePathRelativeToBuildFileDirectoryTransform = new Function<String, String>() {
+    this.resolveFilePathRelativeToBuildFileDirectoryTransform = new Function<String, Path>() {
       @Override
-      public String apply(String input) {
+      public Path apply(String input) {
         return resolveFilePathRelativeToBuildFileDirectory(input);
       }
     };
@@ -110,11 +108,6 @@ public final class BuildRuleFactoryParams {
     return abstractBuildRuleFactoryParams;
   }
 
-  public BuildTarget parseVisibilityTarget(String visibilityTarget)
-      throws NoSuchBuildTargetException {
-    return buildTargetParser.parse(visibilityTarget, visibilityParseContext);
-  }
-
   /**
    * Convenience method that combines the result of
    * {@link #getRequiredStringAttribute(String)} with
@@ -122,7 +115,7 @@ public final class BuildRuleFactoryParams {
    */
   public Path getRequiredFileAsPathRelativeToProjectRoot(String attributeName) {
     String localPath = getRequiredStringAttribute(attributeName);
-    return Paths.get(resolveFilePathRelativeToBuildFileDirectory(localPath));
+    return resolveFilePathRelativeToBuildFileDirectory(localPath);
   }
 
   /**
@@ -134,14 +127,12 @@ public final class BuildRuleFactoryParams {
    * path relative to the parallel build file directory in the generated files directory. In that
    * case, its existence will not be verified.
    */
-  public String resolveFilePathRelativeToBuildFileDirectory(String path) {
+  public Path resolveFilePathRelativeToBuildFileDirectory(String path) {
     if (path.startsWith(GENFILE_PREFIX)) {
       path = path.substring(GENFILE_PREFIX.length());
-      return String.format("%s/%s",
-          BuckConstant.GEN_DIR,
-          resolvePathAgainstBuildTargetBase(path));
+      return Paths.get(BuckConstant.GEN_DIR, resolvePathAgainstBuildTargetBase(path));
     } else {
-      String fullPath = resolvePathAgainstBuildTargetBase(path);
+      Path fullPath = Paths.get(resolvePathAgainstBuildTargetBase(path));
       File file = filesystem.getFileForRelativePath(fullPath);
 
       // TODO(mbolin): Eliminate this temporary exemption for symbolic links.
@@ -158,11 +149,11 @@ public final class BuildRuleFactoryParams {
 
       // First, verify that the path is a descendant of the directory containing the build file.
       String basePath = target.getBasePath();
-      if (!basePath.isEmpty() && !fullPath.startsWith(basePath + '/')) {
+      if (!basePath.isEmpty() && !fullPath.startsWith(basePath)) {
         throw new RuntimeException(file + " is not a descendant of " + target.getBasePath());
       }
 
-      checkFullPath(fullPath);
+      checkFullPath(fullPath.toString());
 
       return fullPath;
     }
@@ -191,7 +182,7 @@ public final class BuildRuleFactoryParams {
     return new File(resolvePathAgainstBuildTargetBase(path));
   }
 
-  public String resolveDirectoryPathRelativeToBuildFileDirectory(String path) {
+  public Path resolveDirectoryPathRelativeToBuildFileDirectory(String path) {
     Preconditions.checkNotNull(path);
     Preconditions.checkArgument(!path.startsWith(GENFILE_PREFIX));
 
@@ -205,7 +196,7 @@ public final class BuildRuleFactoryParams {
       throw new RuntimeException("Not a directory: " + fullPath);
     }
 
-    return fullPath;
+    return Paths.get(fullPath);
   }
 
   private String resolvePathAgainstBuildTargetBase(String path) {
@@ -246,8 +237,8 @@ public final class BuildRuleFactoryParams {
       builder.addDep(buildTarget);
       return new BuildTargetSourcePath(buildTarget);
     } else {
-      String relativePath = resolveFilePathRelativeToBuildFileDirectory(resource);
-      return new FileSourcePath(relativePath);
+      Path relativePath = resolveFilePathRelativeToBuildFileDirectory(resource);
+      return new FileSourcePath(relativePath.toString());
     }
   }
 
@@ -327,7 +318,7 @@ public final class BuildRuleFactoryParams {
     }
   }
 
-  public Function<String, String> getResolveFilePathRelativeToBuildFileDirectoryTransform() {
+  public Function<String, Path> getResolveFilePathRelativeToBuildFileDirectoryTransform() {
     return resolveFilePathRelativeToBuildFileDirectoryTransform;
   }
 
@@ -391,8 +382,13 @@ public final class BuildRuleFactoryParams {
     }
   }
 
-  public Function<String, Path> getPathRelativizer() {
-    return abstractBuildRuleFactoryParams.getPathRelativizer();
+  @Nullable
+  public Object getNullableRawAttribute(String attributeName) {
+    return instance.get(attributeName);
+  }
+
+  public Function<Path, Path> getPathRelativizer() {
+    return abstractBuildRuleFactoryParams.getPathAbsolutifier();
   }
 
   public RuleKeyBuilderFactory getRuleKeyBuilderFactory() {

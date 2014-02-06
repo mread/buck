@@ -16,13 +16,14 @@
 
 package com.facebook.buck.cli;
 
-import static com.facebook.buck.util.BuckConstant.GEN_DIR;
+import static com.facebook.buck.util.BuckConstant.GEN_PATH;
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.createNiceMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
 import static org.easymock.EasyMock.verify;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
@@ -56,8 +57,6 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
-import org.hamcrest.collection.IsIterableContainingInAnyOrder;
-import org.hamcrest.collection.IsIterableContainingInOrder;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.kohsuke.args4j.CmdLineException;
@@ -70,6 +69,8 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
@@ -93,10 +94,10 @@ public class TestCommandTest {
    */
   @Test
   public void testGeneratedSourceFile() {
-    String pathToGenFile = GEN_DIR + "/GeneratedFile.java";
+    Path pathToGenFile = GEN_PATH.resolve("GeneratedFile.java");
     assertTrue(JavaTestRule.isGeneratedFile(pathToGenFile));
 
-    ImmutableSortedSet<String> javaSrcs = ImmutableSortedSet.of(pathToGenFile);
+    ImmutableSortedSet<Path> javaSrcs = ImmutableSortedSet.of(pathToGenFile);
     JavaLibraryRule javaLibraryRule = new FakeJavaLibraryRule(new BuildTarget("//foo", "bar"))
         .setJavaSrcs(javaSrcs);
 
@@ -123,10 +124,10 @@ public class TestCommandTest {
    */
   @Test
   public void testNonGeneratedSourceFile() {
-    String pathToNonGenFile = "package/src/SourceFile1.java";
+    Path pathToNonGenFile = Paths.get("package/src/SourceFile1.java");
     assertFalse(JavaTestRule.isGeneratedFile(pathToNonGenFile));
 
-    ImmutableSortedSet<String> javaSrcs = ImmutableSortedSet.of(pathToNonGenFile);
+    ImmutableSortedSet<Path> javaSrcs = ImmutableSortedSet.of(pathToNonGenFile);
     JavaLibraryRule javaLibraryRule = new FakeJavaLibraryRule(new BuildTarget("//foo", "bar"))
         .setJavaSrcs(javaSrcs);
 
@@ -168,10 +169,10 @@ public class TestCommandTest {
    */
   @Test
   public void testUnifiedSourceFile() {
-    String pathToNonGenFile = "java/package/SourceFile1.java";
+    Path pathToNonGenFile = Paths.get("java/package/SourceFile1.java");
     assertFalse(JavaTestRule.isGeneratedFile(pathToNonGenFile));
 
-    ImmutableSortedSet<String> javaSrcs = ImmutableSortedSet.of(pathToNonGenFile);
+    ImmutableSortedSet<Path> javaSrcs = ImmutableSortedSet.of(pathToNonGenFile);
     JavaLibraryRule javaLibraryRule = new FakeJavaLibraryRule(new BuildTarget("//foo", "bar"))
         .setJavaSrcs(javaSrcs);
 
@@ -200,11 +201,11 @@ public class TestCommandTest {
    */
   @Test
   public void testMixedSourceFile() {
-    String pathToGenFile = (GEN_DIR + "/com/facebook/GeneratedFile.java");
-    String pathToNonGenFile1 = ("package/src/SourceFile1.java");
-    String pathToNonGenFile2 = ("package/src-gen/SourceFile2.java");
+    Path pathToGenFile = GEN_PATH.resolve("com/facebook/GeneratedFile.java");
+    Path pathToNonGenFile1 = Paths.get("package/src/SourceFile1.java");
+    Path pathToNonGenFile2 = Paths.get("package/src-gen/SourceFile2.java");
 
-    ImmutableSortedSet<String> javaSrcs = ImmutableSortedSet.of(
+    ImmutableSortedSet<Path> javaSrcs = ImmutableSortedSet.of(
         pathToGenFile, pathToNonGenFile1, pathToNonGenFile2);
 
     File parentFile1 = createMock(File.class);
@@ -408,9 +409,9 @@ public class TestCommandTest {
     DependencyGraph graph = createDependencyGraphFromBuildRules(rules);
     TestCommandOptions options = getOptions("--include", "linux", "windows");
 
-    Iterable<TestRule> result = TestCommand.getCandidateRulesByIncludedLabels(
-        graph, options.getIncludedLabels());
-    assertThat(result, IsIterableContainingInAnyOrder.containsInAnyOrder(rule1, rule3));
+    Iterable<TestRule> result = TestCommand.filterTestRules(options,
+        TestCommand.getCandidateRules(graph));
+    assertThat(result, containsInAnyOrder(rule1, rule3));
   }
 
   @Test
@@ -438,7 +439,51 @@ public class TestCommandTest {
     List<TestRule> testRules = ImmutableList.of(rule1, rule2, rule3);
 
     Iterable<TestRule> result = TestCommand.filterTestRules(options, testRules);
-    assertThat(result, IsIterableContainingInOrder.contains(rule2));
+    assertThat(result, contains(rule2));
+  }
+
+  @Test
+  public void testLabelConjunctionsWithInclude() throws CmdLineException {
+    TestCommandOptions options = getOptions("--include", "windows+linux");
+
+    TestRule rule1 = new FakeTestRule(BuildRuleType.JAVA_TEST,
+        ImmutableSet.of("windows", "linux"),
+        BuildTargetFactory.newInstance("//:for"),
+        ImmutableSortedSet.<BuildRule>of(),
+        ImmutableSet.<BuildTargetPattern>of());
+
+    TestRule rule2 = new FakeTestRule(BuildRuleType.JAVA_TEST,
+        ImmutableSet.of("windows"),
+        BuildTargetFactory.newInstance("//:lulz"),
+        ImmutableSortedSet.<BuildRule>of(),
+        ImmutableSet.<BuildTargetPattern>of());
+
+    List<TestRule> testRules = ImmutableList.of(rule1, rule2);
+
+    Iterable<TestRule> result = TestCommand.filterTestRules(options, testRules);
+    assertEquals(ImmutableSet.of(rule1), result);
+  }
+
+  @Test
+  public void testLabelConjunctionsWithExclude() throws CmdLineException {
+    TestCommandOptions options = getOptions("--exclude", "windows+linux");
+
+    TestRule rule1 = new FakeTestRule(BuildRuleType.JAVA_TEST,
+        ImmutableSet.of("windows", "linux"),
+        BuildTargetFactory.newInstance("//:for"),
+        ImmutableSortedSet.<BuildRule>of(),
+        ImmutableSet.<BuildTargetPattern>of());
+
+    TestRule rule2 = new FakeTestRule(BuildRuleType.JAVA_TEST,
+        ImmutableSet.of("windows"),
+        BuildTargetFactory.newInstance("//:lulz"),
+        ImmutableSortedSet.<BuildRule>of(),
+        ImmutableSet.<BuildTargetPattern>of());
+
+    List<TestRule> testRules = ImmutableList.of(rule1, rule2);
+
+    Iterable<TestRule> result = TestCommand.filterTestRules(options, testRules);
+    assertEquals(ImmutableSet.of(rule2), result);
   }
 
   @Test
@@ -454,7 +499,8 @@ public class TestCommandTest {
         TestCommand.isTestRunRequiredForTest(
             createMock(TestRule.class),
             executionContext,
-            createMock(TestRuleKeyFileHelper.class))
+            createMock(TestRuleKeyFileHelper.class),
+            false)
     );
 
     verify(executionContext);
@@ -476,7 +522,8 @@ public class TestCommandTest {
         TestCommand.isTestRunRequiredForTest(
             testRule,
             executionContext,
-            createMock(TestRuleKeyFileHelper.class)));
+            createMock(TestRuleKeyFileHelper.class),
+            false));
 
     verify(executionContext, testRule);
   }
@@ -496,7 +543,8 @@ public class TestCommandTest {
         TestCommand.isTestRunRequiredForTest(
             testRule,
             executionContext,
-            createMock(TestRuleKeyFileHelper.class)));
+            createMock(TestRuleKeyFileHelper.class),
+            false));
 
     verify(executionContext, testRule);
   }
@@ -518,20 +566,24 @@ public class TestCommandTest {
     assertTrue(
         "A cached build should run the tests if the test output directory\'s rule key is not " +
             "present or does not matche the rule key for the test.",
-        TestCommand.isTestRunRequiredForTest(testRule, executionContext, testRuleKeyFileHelper));
+        TestCommand.isTestRunRequiredForTest(
+            testRule, executionContext, testRuleKeyFileHelper, false));
 
     verify(executionContext, testRule, testRuleKeyFileHelper);
   }
 
   @Test
-  public void testIfALabelIsIncludedItShouldNotBeExcluded() throws CmdLineException {
-    TestCommandOptions options = new TestCommandOptions(new FakeBuckConfig());
+  public void testIfAGlobalExcludeExcludesALabel() throws CmdLineException {
+    BuckConfig config = new FakeBuckConfig(
+        ImmutableMap.<String, Map<String, String>>of(
+            "test",
+            ImmutableMap.of("excluded_labels", "e2e")));
+    assertThat(config.getDefaultExcludedLabels(), contains("e2e"));
+    TestCommandOptions options = new TestCommandOptions(config);
 
-    new CmdLineParserAdditionalOptions(options).parseArgument(
-        "-e", "e2e", "--exclude", "other", "--include", "e2e");
+    new CmdLineParserAdditionalOptions(options).parseArgument();
 
-    ImmutableSet<String> excluded = options.getExcludedLabels();
-    assertEquals("other", Iterables.getOnlyElement(excluded));
+    assertFalse(options.isMatchedByLabelOptions(ImmutableSet.of("e2e")));
   }
 
   @Test
@@ -546,8 +598,7 @@ public class TestCommandTest {
 
     new CmdLineParserAdditionalOptions(options).parseArgument("--include", "e2e");
 
-    ImmutableSet<String> included = options.getIncludedLabels();
-    assertEquals("e2e", Iterables.getOnlyElement(included));
+    assertTrue(options.isMatchedByLabelOptions(ImmutableSet.of("e2e")));
   }
 
   @Test

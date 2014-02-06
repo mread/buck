@@ -87,7 +87,7 @@ public class SplitZipStepTest {
 
     // Note that we cannot test data[1] (the hash) because zip files change their hash each
     // time they are written due to timestamps written into the file.
-    assertEquals(SmartDexingStep.transformInputToDexOutput(outJar, DexStore.JAR), data[0]);
+    assertEquals("test.dex.jar", data[0]);
     assertTrue(String.format("Unexpected class: %s", data[2]),
         fileToClassName.values().contains(data[2]));
   }
@@ -96,17 +96,18 @@ public class SplitZipStepTest {
   public void testRequiredInPrimaryZipPredicate() throws IOException {
     Path primaryDexClassesFile = Paths.get("the/manifest.txt");
     SplitZipStep splitZipStep = new SplitZipStep(
-        /* inputPathsToSplit */ ImmutableSet.<String>of(),
-        /* secondaryJarMetaPath */ "",
-        /* primaryJarPath */ "",
-        /* secondaryJarDir */ "",
+        /* inputPathsToSplit */ ImmutableSet.<Path>of(),
+        /* secondaryJarMetaPath */ Paths.get(""),
+        /* primaryJarPath */ Paths.get(""),
+        /* secondaryJarDir */ Paths.get(""),
         /* secondaryJarPattern */ "",
+        /* proguardFullConfigFile */ Optional.<Path>absent(),
         /* proguardMappingFile */ Optional.<Path>absent(),
-        /* primaryDexSubstrings */ ImmutableSet.of("List"),
+        /* primaryDexPatterns */ ImmutableSet.of("List"),
         Optional.of(primaryDexClassesFile),
         ZipSplitter.DexSplitStrategy.MAXIMIZE_PRIMARY_DEX_SIZE,
         DexStore.JAR,
-        /* pathToReportDir */ "",
+        /* pathToReportDir */ Paths.get(""),
         /* useLinearAllocSplitDex */ true,
         /* linearAllocHardLimit */ 4 * 1024 * 1024);
     List<String> linesInManifestFile = ImmutableList.of(
@@ -154,20 +155,22 @@ public class SplitZipStepTest {
 
   @Test
   public void testRequiredInPrimaryZipPredicateWithProguard() throws IOException {
+    Path proguardConfigFile = Paths.get("the/configuration.txt");
     Path proguardMappingFile = Paths.get("the/mapping.txt");
     Path primaryDexClassesFile = Paths.get("the/manifest.txt");
     SplitZipStep splitZipStep = new SplitZipStep(
-        /* inputPathsToSplit */ ImmutableSet.<String>of(),
-        /* secondaryJarMetaPath */ "",
-        /* primaryJarPath */ "",
-        /* secondaryJarDir */ "",
+        /* inputPathsToSplit */ ImmutableSet.<Path>of(),
+        /* secondaryJarMetaPath */ Paths.get(""),
+        /* primaryJarPath */ Paths.get(""),
+        /* secondaryJarDir */ Paths.get(""),
         /* secondaryJarPattern */ "",
+        /* proguardFullConfigFile */ Optional.of(proguardConfigFile),
         /* proguardMappingFile */ Optional.of(proguardMappingFile),
-        /* primaryDexSubstrings */ ImmutableSet.of("/primary/", "x/"),
+        /* primaryDexPatterns */ ImmutableSet.of("/primary/", "x/"),
         Optional.of(primaryDexClassesFile),
         ZipSplitter.DexSplitStrategy.MAXIMIZE_PRIMARY_DEX_SIZE,
         DexStore.JAR,
-        /* pathToReportDir */ "",
+        /* pathToReportDir */ Paths.get(""),
         /* useLinearAllocSplitDex */ true,
         /* linearAllocHardLimit */ 4 * 1024 * 1024);
     List<String> linesInMappingFile = ImmutableList.of(
@@ -191,8 +194,8 @@ public class SplitZipStepTest {
     ProjectFilesystem projectFilesystem = EasyMock.createMock(ProjectFilesystem.class);
     EasyMock.expect(projectFilesystem.readLines(primaryDexClassesFile))
         .andReturn(linesInManifestFile);
-    EasyMock.expect(projectFilesystem.exists(proguardMappingFile.toString()))
-        .andReturn(true);
+    EasyMock.expect(projectFilesystem.readLines(proguardConfigFile))
+        .andReturn(ImmutableList.<String>of());
     EasyMock.expect(projectFilesystem.readLines(proguardMappingFile))
         .andReturn(linesInMappingFile);
     ExecutionContext context = EasyMock.createMock(ExecutionContext.class);
@@ -226,6 +229,44 @@ public class SplitZipStepTest {
     EasyMock.verify(projectFilesystem, context);
   }
 
+  @Test
+  public void testNonObfuscatedBuild() throws IOException {
+    Path proguardConfigFile = Paths.get("the/configuration.txt");
+    Path proguardMappingFile = Paths.get("the/mapping.txt");
+    SplitZipStep splitZipStep = new SplitZipStep(
+        /* inputPathsToSplit */ ImmutableSet.<Path>of(),
+        /* secondaryJarMetaPath */ Paths.get(""),
+        /* primaryJarPath */ Paths.get(""),
+        /* secondaryJarDir */ Paths.get(""),
+        /* secondaryJarPattern */ "",
+        /* proguardFullConfigFile */ Optional.of(proguardConfigFile),
+        /* proguardMappingFile */ Optional.of(proguardMappingFile),
+        /* primaryDexPatterns */ ImmutableSet.<String>of("primary"),
+        /* primaryDexClassesFile */ Optional.<Path>absent(),
+        ZipSplitter.DexSplitStrategy.MAXIMIZE_PRIMARY_DEX_SIZE,
+        DexStore.JAR,
+        /* pathToReportDir */ Paths.get(""),
+        /* useLinearAllocSplitDex */ true,
+        /* linearAllocHardLimit */ 4 * 1024 * 1024);
+
+    ProjectFilesystem projectFilesystem = EasyMock.createMock(ProjectFilesystem.class);
+    EasyMock.expect(projectFilesystem.readLines(proguardConfigFile))
+        .andReturn(ImmutableList.<String>of("-dontobfuscate"));
+    ExecutionContext context = EasyMock.createMock(ExecutionContext.class);
+    EasyMock.expect(context.getProjectFilesystem()).andReturn(projectFilesystem).anyTimes();
+    EasyMock.replay(projectFilesystem, context);
+
+    Predicate<String> requiredInPrimaryZipPredicate = splitZipStep
+        .createRequiredInPrimaryZipPredicate(context);
+    assertTrue(
+        "Primary class should be in primary.",
+        requiredInPrimaryZipPredicate.apply("primary.class"));
+    assertFalse(
+        "Secondary class should be in secondary.",
+        requiredInPrimaryZipPredicate.apply("secondary.class"));
+
+    EasyMock.verify(projectFilesystem, context);
+  }
 
   @Test
   public void testClassFilePattern() {

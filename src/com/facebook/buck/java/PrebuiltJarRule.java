@@ -37,9 +37,9 @@ import com.facebook.buck.rules.InitializableFromDisk;
 import com.facebook.buck.rules.OnDiskBuildInfo;
 import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.rules.Sha1HashCode;
-import com.facebook.buck.step.AbstractExecutionStep;
 import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.step.Step;
+import com.facebook.buck.util.Optionals;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
@@ -54,6 +54,8 @@ import com.google.common.io.Files;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -64,8 +66,8 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
 
   private final static BuildableProperties OUTPUT_TYPE = new BuildableProperties(LIBRARY);
 
-  private final String binaryJar;
-  private final Optional<String> sourceJar;
+  private final Path binaryJar;
+  private final Optional<Path> sourceJar;
   private final Optional<String> javadocUrl;
   private final Supplier<ImmutableSetMultimap<JavaLibraryRule, String>>
       transitiveClasspathEntriesSupplier;
@@ -77,8 +79,8 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
   private JavaLibraryRule.Data buildOutput;
 
   PrebuiltJarRule(BuildRuleParams buildRuleParams,
-      String classesJar,
-      Optional<String> sourceJar,
+      Path classesJar,
+      Optional<Path> sourceJar,
       Optional<String> javadocUrl) {
     super(buildRuleParams);
     this.binaryJar = Preconditions.checkNotNull(classesJar);
@@ -91,7 +93,7 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
           public ImmutableSetMultimap<JavaLibraryRule, String> get() {
             ImmutableSetMultimap.Builder<JavaLibraryRule, String> classpathEntries =
                 ImmutableSetMultimap.builder();
-            classpathEntries.put(PrebuiltJarRule.this, getBinaryJar());
+            classpathEntries.put(PrebuiltJarRule.this, getBinaryJar().toString());
             classpathEntries.putAll(Classpaths.getClasspathEntries(getDeps()));
             return classpathEntries.build();
           }
@@ -103,7 +105,7 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
           public ImmutableSetMultimap<JavaLibraryRule, String> get() {
             ImmutableSetMultimap.Builder<JavaLibraryRule, String> classpathEntries =
                 ImmutableSetMultimap.builder();
-            classpathEntries.put(PrebuiltJarRule.this, getBinaryJar());
+            classpathEntries.put(PrebuiltJarRule.this, getBinaryJar().toString());
             return classpathEntries.build();
           }
         });
@@ -119,11 +121,11 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
     return OUTPUT_TYPE;
   }
 
-  public String getBinaryJar() {
+  public Path getBinaryJar() {
     return binaryJar;
   }
 
-  public Optional<String> getSourceJar() {
+  public Optional<Path> getSourceJar() {
     return sourceJar;
   }
 
@@ -132,8 +134,11 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
-    return ImmutableList.of(getBinaryJar());
+  public Collection<Path> getInputsToCompareToOutput() {
+    ImmutableList.Builder<Path> builder = ImmutableList.builder();
+    builder.add(binaryJar);
+    Optionals.addIfPresent(sourceJar, builder);
+    return builder.build();
   }
 
   @Override
@@ -177,11 +182,11 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
 
   @Override
   public ImmutableSetMultimap<JavaLibraryRule, String> getOutputClasspathEntries() {
-    return ImmutableSetMultimap.<JavaLibraryRule, String>builder().put(this, getBinaryJar()).build();
+    return ImmutableSetMultimap.<JavaLibraryRule, String>builder().put(this, getBinaryJar().toString()).build();
   }
 
   @Override
-  public ImmutableSortedSet<String> getJavaSrcs() {
+  public ImmutableSortedSet<Path> getJavaSrcs() {
     return ImmutableSortedSet.of();
   }
 
@@ -208,12 +213,11 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
     return steps.build();
   }
 
-  class CalculateAbiStep extends AbstractExecutionStep {
+  class CalculateAbiStep implements Step {
 
     private final BuildableContext buildableContext;
 
     private CalculateAbiStep(BuildableContext buildableContext) {
-      super("calculate ABI for " + binaryJar);
       this.buildableContext = Preconditions.checkNotNull(buildableContext);
     }
 
@@ -234,18 +238,26 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
       return 0;
     }
 
+    @Override
+    public String getShortName() {
+      return "calculate_abi";
+    }
+
+    @Override
+    public String getDescription(ExecutionContext context) {
+      return String.format("%s %s", getShortName(), binaryJar);
+    }
+
   }
 
   @Override
-  public String getPathToOutputFile() {
+  public Path getPathToOutputFile() {
     return getBinaryJar();
   }
 
   @Override
   public RuleKey.Builder appendToRuleKey(RuleKey.Builder builder) throws IOException {
     return super.appendToRuleKey(builder)
-        .set("binaryJar", binaryJar)
-        .set("sourceJar", sourceJar)
         .set("javadocUrl", javadocUrl);
   }
 
@@ -255,8 +267,8 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
 
   public static class Builder extends AbstractBuildRuleBuilder<PrebuiltJarRule> {
 
-    private String binaryJar;
-    private Optional<String> sourceJar = Optional.absent();
+    private Path binaryJar;
+    private Optional<Path> sourceJar = Optional.absent();
     private Optional<String> javadocUrl = Optional.absent();
 
     private Builder(AbstractBuildRuleBuilderParams params) {
@@ -289,12 +301,12 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
       return this;
     }
 
-    public Builder setBinaryJar(String binaryJar) {
+    public Builder setBinaryJar(Path binaryJar) {
       this.binaryJar = binaryJar;
       return this;
     }
 
-    public Builder setSourceJar(Optional<String> sourceJar) {
+    public Builder setSourceJar(Optional<Path> sourceJar) {
       this.sourceJar = Preconditions.checkNotNull(sourceJar);
       return this;
     }

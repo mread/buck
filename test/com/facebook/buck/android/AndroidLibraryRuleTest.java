@@ -33,6 +33,9 @@ import com.google.common.collect.ImmutableSet;
 
 import org.junit.Test;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 public class AndroidLibraryRuleTest {
 
   @Test
@@ -43,17 +46,16 @@ public class AndroidLibraryRuleTest {
     BuildContext context = createMock(BuildContext.class);
     replay(context);
 
-    MoreAsserts.assertListEquals(
+    MoreAsserts.assertIterablesEquals(
         "getInputsToCompareToOutput() should include manifest and src.",
         ImmutableList.of(
-            "java/src/com/foo/Foo.java",
-            "java/src/com/foo/AndroidManifest.xml"),
+            Paths.get("java/src/com/foo/Foo.java"),
+            Paths.get("java/src/com/foo/AndroidManifest.xml")),
         androidLibraryRuleBuilderFoo.getInputsToCompareToOutput());
 
-    MoreAsserts.assertListEquals(
+    MoreAsserts.assertIterablesEquals(
         "getInputsToCompareToOutput() should include only src.",
-        ImmutableList.of(
-            "java/src/com/bar/Bar.java"),
+        ImmutableList.of(Paths.get("java/src/com/bar/Bar.java")),
         androidLibraryRuleBuilderBar.getInputsToCompareToOutput());
 
     assertEquals(
@@ -66,8 +68,8 @@ public class AndroidLibraryRuleTest {
     return (AndroidLibraryRule)params.buildAndAddToIndex(
         AndroidLibraryRule.newAndroidLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(BuildTargetFactory.newInstance("//java/src/com/foo:foo"))
-            .addSrc("java/src/com/foo/Foo.java")
-            .setManifestFile((Optional.of("java/src/com/foo/AndroidManifest.xml")))
+            .addSrc(Paths.get("java/src/com/foo/Foo.java"))
+            .setManifestFile((Optional.of(Paths.get("java/src/com/foo/AndroidManifest.xml"))))
             .addExportedDep(new BuildTarget("//java/src/com/bar", "bar"))
             .addDep(new BuildTarget("//java/src/com/bar", "bar")));
   }
@@ -76,8 +78,8 @@ public class AndroidLibraryRuleTest {
     return (AndroidLibraryRule)params.buildAndAddToIndex(
         AndroidLibraryRule.newAndroidLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(BuildTargetFactory.newInstance("//java/src/com/bar:bar"))
-            .addSrc("java/src/com/bar/Bar.java")
-            .setManifestFile((Optional.<String>absent()))
+            .addSrc(Paths.get("java/src/com/bar/Bar.java"))
+            .setManifestFile((Optional.<Path>absent()))
             .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
   }
 }

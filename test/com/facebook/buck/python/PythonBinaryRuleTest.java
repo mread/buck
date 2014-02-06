@@ -63,14 +63,14 @@ public class PythonBinaryRuleTest {
     ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(javaLibraryTarget)
-            .addSrc("java/src/com/javalib/Bar.java")
+            .addSrc(Paths.get("java/src/com/javalib/Bar.java"))
             .addDep(orphanPyLibraryTarget)
             .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     BuildTarget pyBinaryTarget = BuildTargetFactory.newInstance("//:py_binary");
     PythonBinaryRule pyBinary = ruleResolver.buildAndAddToIndex(
         PythonBinaryRule.newPythonBinaryBuilder(new FakeAbstractBuildRuleBuilderParams())
-            .setMain("foo")
+            .setMain(Paths.get("foo"))
             .addDep(javaLibraryTarget)
             .addDep(pyLibraryTarget)
             .setBuildTarget(pyBinaryTarget)

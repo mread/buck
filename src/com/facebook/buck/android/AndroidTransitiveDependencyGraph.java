@@ -35,7 +35,6 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Sets;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Set;
 
@@ -60,13 +59,12 @@ public class AndroidTransitiveDependencyGraph {
   }
 
   /**
-   * @param uberRDotJavaBuildable that may have produced {@code R.class} files that need to be
-   *     dexed.
+   * @param uberRDotJava that may have produced {@code R.class} files that need to be dexed.
    */
   public AndroidDexTransitiveDependencies findDexDependencies(
       ImmutableList<HasAndroidResourceDeps> androidResourceDeps,
       ImmutableSet<BuildRule> buildRulesToExcludeFromDex,
-      UberRDotJavaBuildable uberRDotJavaBuildable) {
+      UberRDotJava uberRDotJava) {
     // These are paths that will be dex'ed. They may be either directories of compiled .class files,
     // or paths to compiled JAR files.
     final ImmutableSet.Builder<String> pathsToDexBuilder = ImmutableSet.builder();
@@ -101,7 +99,7 @@ public class AndroidTransitiveDependencyGraph {
         // Update pathsToThirdPartyJars.
         if (rule instanceof PrebuiltJarRule) {
           PrebuiltJarRule prebuiltJarRule = (PrebuiltJarRule) rule;
-          pathsToThirdPartyJarsBuilder.add(prebuiltJarRule.getBinaryJar());
+          pathsToThirdPartyJarsBuilder.add(prebuiltJarRule.getBinaryJar().toString());
         }
         return maybeVisitAllDeps(rule, rule.getProperties().is(LIBRARY));
       }
@@ -111,12 +109,12 @@ public class AndroidTransitiveDependencyGraph {
     ImmutableSet<String> rDotJavaPackages = details.rDotJavaPackages;
     Optional<Path> pathToCompiledRDotJavaFilesOptional;
     if (!rDotJavaPackages.isEmpty()) {
-      String pathToCompiledRDotJavaFiles = uberRDotJavaBuildable.getPathToCompiledRDotJavaFiles();
-      pathsToDexBuilder.add(pathToCompiledRDotJavaFiles);
+      Path pathToCompiledRDotJavaFiles = uberRDotJava.getPathToCompiledRDotJavaFiles();
+      pathsToDexBuilder.add(pathToCompiledRDotJavaFiles.toString());
 
       // TODO: Ultimately, pathToCompiledRDotJavaFiles should be pre-dexed so that it does not need
       // its own field in AndroidDexTransitiveDependencies.
-      pathToCompiledRDotJavaFilesOptional = Optional.of(Paths.get(pathToCompiledRDotJavaFiles));
+      pathToCompiledRDotJavaFilesOptional = Optional.of(pathToCompiledRDotJavaFiles);
     } else {
       pathToCompiledRDotJavaFilesOptional = Optional.absent();
     }
@@ -134,7 +132,8 @@ public class AndroidTransitiveDependencyGraph {
     Set<String> pathsToThirdPartyJars =
         Sets.difference(pathsToThirdPartyJarsBuilder.build(), noDxPaths);
 
-    return new AndroidDexTransitiveDependencies(classpathEntries,
+    return new AndroidDexTransitiveDependencies(
+        classpathEntries,
         pathsToThirdPartyJars,
         noDxPaths,
         pathToCompiledRDotJavaFilesOptional);
@@ -151,23 +150,23 @@ public class AndroidTransitiveDependencyGraph {
   public AndroidTransitiveDependencies findDependencies() {
 
     // Paths to assets/ directories that should be included in the final APK.
-    final ImmutableSet.Builder<String> assetsDirectories = ImmutableSet.builder();
+    final ImmutableSet.Builder<Path> assetsDirectories = ImmutableSet.builder();
 
     // Paths to native libs directories (often named libs/) that should be included as raw files
     // directories in the final APK.
-    final ImmutableSet.Builder<String> nativeLibsDirectories = ImmutableSet.builder();
+    final ImmutableSet.Builder<Path> nativeLibsDirectories = ImmutableSet.builder();
 
     // Paths to native libs directories that are to be treated as assets and so should be included
     // as raw files under /assets/lib/ directory in the APK.
-    final ImmutableSet.Builder<String> nativeLibAssetsDirectories = ImmutableSet.builder();
+    final ImmutableSet.Builder<Path> nativeLibAssetsDirectories = ImmutableSet.builder();
 
     final ImmutableSet.Builder<BuildTarget> nativeTargetsWithAssets = ImmutableSet.builder();
 
     // Path to the module's manifest file
-    final ImmutableSet.Builder<String> manifestFiles = ImmutableSet.builder();
+    final ImmutableSet.Builder<Path> manifestFiles = ImmutableSet.builder();
 
     // Path to the module's proguard_config
-    final ImmutableSet.Builder<String> proguardConfigs = ImmutableSet.builder();
+    final ImmutableSet.Builder<Path> proguardConfigs = ImmutableSet.builder();
 
     // Visit all of the transitive dependencies to populate the above collections.
     new AbstractDependencyVisitor(rulesToTraverseForTransitiveDeps) {
@@ -192,11 +191,11 @@ public class AndroidTransitiveDependencyGraph {
           }
         } else if (rule instanceof AndroidResourceRule) {
           AndroidResourceRule androidRule = (AndroidResourceRule) rule;
-          String assetsDirectory = androidRule.getAssets();
+          Path assetsDirectory = androidRule.getAssets();
           if (assetsDirectory != null) {
             assetsDirectories.add(assetsDirectory);
           }
-          String manifestFile = androidRule.getManifestFile();
+          Path manifestFile = androidRule.getManifestFile();
           if (manifestFile != null) {
             manifestFiles.add(manifestFile);
           }

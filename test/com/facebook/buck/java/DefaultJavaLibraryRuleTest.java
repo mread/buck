@@ -16,7 +16,7 @@
 
 package com.facebook.buck.java;
 
-import static com.facebook.buck.util.BuckConstant.BIN_DIR;
+import static com.facebook.buck.util.BuckConstant.BIN_PATH;
 import static org.easymock.EasyMock.createNiceMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
@@ -55,6 +55,8 @@ import com.facebook.buck.rules.FakeRuleKeyBuilderFactory;
 import com.facebook.buck.rules.FileSourcePath;
 import com.facebook.buck.rules.JavaPackageFinder;
 import com.facebook.buck.rules.NoopArtifactCache;
+import com.facebook.buck.rules.RuleKey;
+import com.facebook.buck.rules.RuleKeyBuilderFactory;
 import com.facebook.buck.rules.Sha1HashCode;
 import com.facebook.buck.rules.SourcePath;
 import com.facebook.buck.shell.Genrule;
@@ -62,6 +64,7 @@ import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.step.Step;
 import com.facebook.buck.step.StepRunner;
 import com.facebook.buck.step.fs.MkdirAndSymlinkFileStep;
+import com.facebook.buck.testutil.FakeFileHashCache;
 import com.facebook.buck.testutil.MoreAsserts;
 import com.facebook.buck.testutil.RuleMap;
 import com.facebook.buck.util.AndroidPlatformTarget;
@@ -69,9 +72,11 @@ import com.facebook.buck.util.Ansi;
 import com.facebook.buck.util.BuckConstant;
 import com.facebook.buck.util.Console;
 import com.facebook.buck.util.DefaultDirectoryTraverser;
+import com.facebook.buck.util.MorePaths;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.Verbosity;
 import com.facebook.buck.util.environment.Platform;
+import com.google.common.base.Charsets;
 import com.google.common.base.Optional;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
@@ -84,6 +89,7 @@ import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Ordering;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 
@@ -97,6 +103,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -141,14 +148,13 @@ public class DefaultJavaLibraryRuleTest {
     BuildTarget buildTarget = new BuildTarget("//android/java", "resources");
     DefaultJavaLibraryRule javaRule = new DefaultJavaLibraryRule(
         new FakeBuildRuleParams(buildTarget),
-        /* srcs */ ImmutableSet.<String>of(),
+        /* srcs */ ImmutableSet.<Path>of(),
         ImmutableSet.of(
             new FileSourcePath("android/java/src/com/facebook/base/data.json"),
-            new FileSourcePath("android/java/src/com/facebook/common/util/data.json"),
-            new FileSourcePath("matt.json")
-    ),
+            new FileSourcePath("android/java/src/com/facebook/common/util/data.json")
+        ),
         /* optionalDummyRDotJava */ Optional.<DummyRDotJava>absent(),
-        /* proguardConfig */ Optional.<String>absent(),
+        /* proguardConfig */ Optional.<Path>absent(),
         /* exportedDeps */ ImmutableSortedSet.<BuildRule>of(),
         JavacOptions.DEFAULTS
         );
@@ -156,18 +162,15 @@ public class DefaultJavaLibraryRuleTest {
     ImmutableList.Builder<Step> commands = ImmutableList.builder();
     JavaPackageFinder javaPackageFinder = createJavaPackageFinder();
     javaRule.addResourceCommands(stubContext,
-        commands, BIN_DIR + "/android/java/lib__resources__classes", javaPackageFinder);
+        commands, BIN_PATH.resolve("android/java/lib__resources__classes"), javaPackageFinder);
     List<? extends Step> expected = ImmutableList.of(
         new MkdirAndSymlinkFileStep(
-            "android/java/src/com/facebook/base/data.json",
-            BIN_DIR + "/android/java/lib__resources__classes/com/facebook/base/data.json"),
+            Paths.get("android/java/src/com/facebook/base/data.json"),
+            BIN_PATH.resolve("android/java/lib__resources__classes/com/facebook/base/data.json")),
         new MkdirAndSymlinkFileStep(
-            "android/java/src/com/facebook/common/util/data.json",
-            BIN_DIR + "/android/java/lib__resources__classes/com/facebook/common/util/data.json"),
-        new MkdirAndSymlinkFileStep(
-            "matt.json",
-            BIN_DIR + "/android/java/lib__resources__classes/matt.json"));
-        MoreAsserts.assertListEquals(expected, commands.build());
+            Paths.get("android/java/src/com/facebook/common/util/data.json"),
+            BIN_PATH.resolve("android/java/lib__resources__classes/com/facebook/common/util/data.json")));
+    MoreAsserts.assertListEquals(expected, commands.build());
   }
 
   @Test
@@ -179,13 +182,13 @@ public class DefaultJavaLibraryRuleTest {
     BuildTarget buildTarget = new BuildTarget("//android/java/src", "resources");
     DefaultJavaLibraryRule javaRule = new DefaultJavaLibraryRule(
         new FakeBuildRuleParams(buildTarget),
-        /* srcs */ ImmutableSet.<String>of(),
+        /* srcs */ ImmutableSet.<Path>of(),
         ImmutableSet.<SourcePath>of(
             new FileSourcePath("android/java/src/com/facebook/base/data.json"),
             new FileSourcePath("android/java/src/com/facebook/common/util/data.json")
         ),
         /* optionalDummyRDotJava */ Optional.<DummyRDotJava>absent(),
-        /* proguargConfig */ Optional.<String>absent(),
+        /* proguargConfig */ Optional.<Path>absent(),
         /* exportedDeps */ ImmutableSortedSet.<BuildRule>of(),
         JavacOptions.DEFAULTS
         );
@@ -193,14 +196,14 @@ public class DefaultJavaLibraryRuleTest {
     ImmutableList.Builder<Step> commands = ImmutableList.builder();
     JavaPackageFinder javaPackageFinder = createJavaPackageFinder();
     javaRule.addResourceCommands(stubContext,
-        commands, BIN_DIR + "/android/java/src/lib__resources__classes", javaPackageFinder);
+        commands, BIN_PATH.resolve("android/java/src/lib__resources__classes"), javaPackageFinder);
     List<? extends Step> expected = ImmutableList.of(
         new MkdirAndSymlinkFileStep(
-            "android/java/src/com/facebook/base/data.json",
-            BIN_DIR + "/android/java/src/lib__resources__classes/com/facebook/base/data.json"),
+            Paths.get("android/java/src/com/facebook/base/data.json"),
+            BIN_PATH.resolve("android/java/src/lib__resources__classes/com/facebook/base/data.json")),
         new MkdirAndSymlinkFileStep(
-            "android/java/src/com/facebook/common/util/data.json",
-            BIN_DIR + "/android/java/src/lib__resources__classes/com/facebook/common/util/data.json"));
+            Paths.get("android/java/src/com/facebook/common/util/data.json"),
+            BIN_PATH.resolve("android/java/src/lib__resources__classes/com/facebook/common/util/data.json")));
     assertEquals(expected, commands.build());
     MoreAsserts.assertListEquals(expected, commands.build());
   }
@@ -214,13 +217,13 @@ public class DefaultJavaLibraryRuleTest {
     BuildTarget buildTarget = new BuildTarget("//android/java/src/com/facebook", "resources");
     DefaultJavaLibraryRule javaRule = new DefaultJavaLibraryRule(
         new FakeBuildRuleParams(buildTarget),
-        /* srcs */ ImmutableSet.<String>of(),
+        /* srcs */ ImmutableSet.<Path>of(),
         ImmutableSet.of(
             new FileSourcePath("android/java/src/com/facebook/base/data.json"),
             new FileSourcePath("android/java/src/com/facebook/common/util/data.json")
         ),
         /* optionalDummyRDotJava */ Optional.<DummyRDotJava>absent(),
-        /* proguargConfig */ Optional.<String>absent(),
+        /* proguargConfig */ Optional.<Path>absent(),
         /* exportedDeps */ ImmutableSortedSet.<BuildRule>of(),
         JavacOptions.DEFAULTS);
 
@@ -229,15 +232,15 @@ public class DefaultJavaLibraryRuleTest {
     javaRule.addResourceCommands(
         stubContext,
         commands,
-        BIN_DIR + "/android/java/src/com/facebook/lib__resources__classes",
+        BIN_PATH.resolve("android/java/src/com/facebook/lib__resources__classes"),
         javaPackageFinder);
     List<? extends Step> expected = ImmutableList.of(
         new MkdirAndSymlinkFileStep(
-            "android/java/src/com/facebook/base/data.json",
-            BIN_DIR + "/android/java/src/com/facebook/lib__resources__classes/com/facebook/base/data.json"),
+            Paths.get("android/java/src/com/facebook/base/data.json"),
+            BIN_PATH.resolve("android/java/src/com/facebook/lib__resources__classes/com/facebook/base/data.json")),
         new MkdirAndSymlinkFileStep(
-            "android/java/src/com/facebook/common/util/data.json",
-            BIN_DIR + "/android/java/src/com/facebook/lib__resources__classes/com/facebook/common/util/data.json"));
+            Paths.get("android/java/src/com/facebook/common/util/data.json"),
+            BIN_PATH.resolve("android/java/src/com/facebook/lib__resources__classes/com/facebook/common/util/data.json")));
     MoreAsserts.assertListEquals(expected, commands.build());
   }
 
@@ -249,16 +252,16 @@ public class DefaultJavaLibraryRuleTest {
     tmp.newFolder(folder.split("/"));
     BuildTarget buildTarget = BuildTargetFactory.newInstance("//" + folder + ":fb");
 
-    String src = folder + "/Main.java";
-    tmp.newFile(src);
+    Path src = Paths.get(folder, "Main.java");
+    tmp.newFile(src.toString());
 
     BuildRuleResolver ruleResolver = new BuildRuleResolver();
     ProjectFilesystem projectFilesystem = new ProjectFilesystem(tmp.getRoot());
     DefaultJavaLibraryRule javaLibrary = ruleResolver.buildAndAddToIndex(
         AndroidLibraryRule.newAndroidLibraryRuleBuilder(
             new DefaultBuildRuleBuilderParams(projectFilesystem, new FakeRuleKeyBuilderFactory()))
-        .setBuildTarget(buildTarget)
-        .addSrc(src));
+            .setBuildTarget(buildTarget)
+            .addSrc(src));
 
     String bootclasspath = "effects.jar:maps.jar:usb.jar:";
     BuildContext context = createBuildContext(javaLibrary, bootclasspath, projectFilesystem);
@@ -299,8 +302,8 @@ public class DefaultJavaLibraryRuleTest {
 
     assertEquals(
         "Generated files should not be included in getInputsToCompareToOutput() because they " +
-        "should not be part of the RuleKey computation.",
-        ImmutableList.of("library/data.txt"),
+            "should not be part of the RuleKey computation.",
+        ImmutableList.of(Paths.get("library/data.txt")),
         javaRule.getInputsToCompareToOutput());
   }
 
@@ -407,8 +410,8 @@ public class DefaultJavaLibraryRuleTest {
     BuildTarget processorTarget = BuildTargetFactory.newInstance("//java/processor:processor");
     ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
-        .setBuildTarget(processorTarget)
-        .addSrc("java/processor/processor.java"));
+            .setBuildTarget(processorTarget)
+            .addSrc(Paths.get("java/processor/processor.java")));
 
     BuildTarget libTarget = BuildTargetFactory.newInstance("//java/lib:lib");
     AndroidLibraryRule.Builder builder = AndroidLibraryRule.newAndroidLibraryRuleBuilder(
@@ -432,21 +435,21 @@ public class DefaultJavaLibraryRuleTest {
     JavaLibraryRule libraryOne = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(libraryOneTarget)
-        .addSrc("java/src/com/libone/Bar.java"));
+        .addSrc(Paths.get("java/src/com/libone/Bar.java")));
 
     BuildTarget libraryTwoTarget = BuildTargetFactory.newInstance("//:libtwo");
     JavaLibraryRule libraryTwo = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(libraryTwoTarget)
-        .addSrc("java/src/com/libtwo/Foo.java")
+        .addSrc(Paths.get("java/src/com/libtwo/Foo.java"))
         .addDep(BuildTargetFactory.newInstance("//:libone")));
 
     BuildTarget parentTarget = BuildTargetFactory.newInstance("//:parent");
     JavaLibraryRule parent = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
-        .setBuildTarget(parentTarget)
-        .addSrc("java/src/com/parent/Meh.java")
-        .addDep(BuildTargetFactory.newInstance("//:libtwo")));
+            .setBuildTarget(parentTarget)
+            .addSrc(Paths.get("java/src/com/parent/Meh.java"))
+            .addDep(BuildTargetFactory.newInstance("//:libtwo")));
 
     assertEquals(ImmutableSetMultimap.of(
         libraryOne, "buck-out/gen/lib__libone__output/libone.jar",
@@ -494,7 +497,7 @@ public class DefaultJavaLibraryRuleTest {
     JavaLibraryRule libraryTwo = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(libraryTwoTarget)
-        .addSrc("java/src/com/libtwo/Foo.java")
+        .addSrc(Paths.get("java/src/com/libtwo/Foo.java"))
         .addDep(libraryOneTarget));
 
     BuildContext buildContext = EasyMock.createMock(BuildContext.class);
@@ -581,28 +584,28 @@ public class DefaultJavaLibraryRuleTest {
     JavaLibraryRule notIncluded = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(nonIncludedTarget)
-            .addSrc("java/src/com/not_included/Raz.java"));
+            .addSrc(Paths.get("java/src/com/not_included/Raz.java")));
 
     BuildTarget includedTarget = BuildTargetFactory.newInstance("//:included");
     JavaLibraryRule included = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(includedTarget)
-            .addSrc("java/src/com/included/Rofl.java"));
+            .addSrc(Paths.get("java/src/com/included/Rofl.java")));
 
     BuildTarget libraryOneTarget = BuildTargetFactory.newInstance("//:libone");
     JavaLibraryRule libraryOne = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
-        .setBuildTarget(libraryOneTarget)
-        .addDep(BuildTargetFactory.newInstance("//:not_included"))
-        .addDep(BuildTargetFactory.newInstance("//:included"))
-        .addExportedDep(BuildTargetFactory.newInstance("//:included"))
-        .addSrc("java/src/com/libone/Bar.java"));
+            .setBuildTarget(libraryOneTarget)
+            .addDep(BuildTargetFactory.newInstance("//:not_included"))
+            .addDep(BuildTargetFactory.newInstance("//:included"))
+            .addExportedDep(BuildTargetFactory.newInstance("//:included"))
+            .addSrc(Paths.get("java/src/com/libone/Bar.java")));
 
     BuildTarget libraryTwoTarget = BuildTargetFactory.newInstance("//:libtwo");
     JavaLibraryRule libraryTwo = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(libraryTwoTarget)
-        .addSrc("java/src/com/libtwo/Foo.java")
+        .addSrc(Paths.get("java/src/com/libtwo/Foo.java"))
         .addDep(BuildTargetFactory.newInstance("//:libone"))
         .addExportedDep(BuildTargetFactory.newInstance("//:libone")));
 
@@ -610,7 +613,7 @@ public class DefaultJavaLibraryRuleTest {
     JavaLibraryRule parent = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(parentTarget)
-        .addSrc("java/src/com/parent/Meh.java")
+        .addSrc(Paths.get("java/src/com/parent/Meh.java"))
         .addDep(BuildTargetFactory.newInstance("//:libtwo")));
 
     assertEquals(
@@ -984,12 +987,16 @@ public class DefaultJavaLibraryRuleTest {
       ImmutableSet<String> srcs,
       ImmutableSet<BuildRule> deps,
       ImmutableSet<BuildRule> exportedDeps) {
+    ImmutableSortedSet<Path> srcsAsPaths = FluentIterable.from(srcs)
+        .transform(MorePaths.TO_PATH)
+        .toSortedSet(Ordering.natural());
+
     return new DefaultJavaLibraryRule(
         new FakeBuildRuleParams(buildTarget, ImmutableSortedSet.copyOf(deps)),
-        srcs,
+        srcsAsPaths,
         /* resources */ ImmutableSet.<SourcePath>of(),
         /* optionalDummyRDotJava */ Optional.<DummyRDotJava>absent(),
-        /* proguardConfig */ Optional.<String>absent(),
+        /* proguardConfig */ Optional.<Path>absent(),
         exportedDeps,
         JavacOptions.builder().build()
         ) {
@@ -1012,7 +1019,7 @@ public class DefaultJavaLibraryRuleTest {
     DefaultJavaLibraryRule libraryOne = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(libraryOneTarget)
-        .addSrc("java/src/com/libone/bar.java"));
+        .addSrc(Paths.get("java/src/com/libone/bar.java")));
 
     BuildContext context = createSuggestContext(ruleResolver,
         BuildDependencies.FIRST_ORDER_ONLY);
@@ -1039,30 +1046,30 @@ public class DefaultJavaLibraryRuleTest {
     DefaultJavaLibraryRule libraryOne = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(libraryOneTarget)
-        .addSrc("java/src/com/libone/Bar.java")
+        .addSrc(Paths.get("java/src/com/libone/Bar.java"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     BuildTarget libraryTwoTarget = BuildTargetFactory.newInstance("//:libtwo");
     DefaultJavaLibraryRule libraryTwo = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
-        .setBuildTarget(libraryTwoTarget)
-        .addSrc("java/src/com/libtwo/Foo.java")
-        .addDep(BuildTargetFactory.newInstance("//:libone")));
+            .setBuildTarget(libraryTwoTarget)
+            .addSrc(Paths.get("java/src/com/libtwo/Foo.java"))
+            .addDep(BuildTargetFactory.newInstance("//:libone")));
 
     BuildTarget parentTarget = BuildTargetFactory.newInstance("//:parent");
     DefaultJavaLibraryRule parent = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(parentTarget)
-        .addSrc("java/src/com/parent/Meh.java")
+        .addSrc(Paths.get("java/src/com/parent/Meh.java"))
         .addDep(BuildTargetFactory.newInstance("//:libtwo"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     BuildTarget grandparentTarget = BuildTargetFactory.newInstance("//:grandparent");
     DefaultJavaLibraryRule grandparent = ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
-        .setBuildTarget(grandparentTarget)
-        .addSrc("java/src/com/parent/OldManRiver.java")
-        .addDep(BuildTargetFactory.newInstance("//:parent")));
+            .setBuildTarget(grandparentTarget)
+            .addSrc(Paths.get("java/src/com/parent/OldManRiver.java"))
+            .addDep(BuildTargetFactory.newInstance("//:parent")));
 
     BuildContext context = createSuggestContext(ruleResolver,
         BuildDependencies.WARN_ON_TRANSITIVE);
@@ -1087,6 +1094,118 @@ public class DefaultJavaLibraryRuleTest {
                                          ImmutableSet.of("com.facebook.Foo", "com.facebook.Bar")));
 
     EasyMock.verify(context);
+  }
+
+  @Test
+  public void testRuleKeyIsOrderInsensitiveForSourcesAndResources() throws IOException {
+    AbstractBuildRuleBuilderParams params = new FakeAbstractBuildRuleBuilderParams();
+
+    // Note that these filenames were deliberately chosen to have identical hashes to maximize
+    // the chance of order-sensitivity when being inserted into a HashMap.  Just using
+    // {foo,bar}.{java,txt} resulted in a passing test even for the old broken code.
+
+    DefaultJavaLibraryRule rule1 = DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(params)
+        .setBuildTarget(BuildTargetFactory.newInstance("//lib:lib"))
+        .addSrc(Paths.get("agifhbkjdec.java"))
+        .addSrc(Paths.get("bdeafhkgcji.java"))
+        .addSrc(Paths.get("bdehgaifjkc.java"))
+        .addSrc(Paths.get("cfiabkjehgd.java"))
+        .addResource(new FileSourcePath("becgkaifhjd.txt"))
+        .addResource(new FileSourcePath("bkhajdifcge.txt"))
+        .addResource(new FileSourcePath("cabfghjekid.txt"))
+        .addResource(new FileSourcePath("chkdbafijge.txt"))
+        .build(new BuildRuleResolver());
+
+    DefaultJavaLibraryRule rule2 = DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(params)
+        .setBuildTarget(BuildTargetFactory.newInstance("//lib:lib"))
+        .addSrc(Paths.get("cfiabkjehgd.java"))
+        .addSrc(Paths.get("bdehgaifjkc.java"))
+        .addSrc(Paths.get("bdeafhkgcji.java"))
+        .addSrc(Paths.get("agifhbkjdec.java"))
+        .addResource(new FileSourcePath("chkdbafijge.txt"))
+        .addResource(new FileSourcePath("cabfghjekid.txt"))
+        .addResource(new FileSourcePath("bkhajdifcge.txt"))
+        .addResource(new FileSourcePath("becgkaifhjd.txt"))
+        .build(new BuildRuleResolver());
+
+    Collection<Path> inputs1 = rule1.getInputsToCompareToOutput();
+    Collection<Path> inputs2 = rule2.getInputsToCompareToOutput();
+    assertEquals(ImmutableList.copyOf(inputs1), ImmutableList.copyOf(inputs2));
+
+    ImmutableMap.Builder<String, String> fileHashes = ImmutableMap.builder();
+    for (String filename : ImmutableList.of(
+        "agifhbkjdec.java", "bdeafhkgcji.java", "bdehgaifjkc.java", "cfiabkjehgd.java",
+        "becgkaifhjd.txt", "bkhajdifcge.txt", "cabfghjekid.txt", "chkdbafijge.txt")) {
+      fileHashes.put(filename, Hashing.sha1().hashString(filename, Charsets.UTF_8).toString());
+    }
+    RuleKeyBuilderFactory ruleKeyBuilderFactory =
+        new FakeRuleKeyBuilderFactory(FakeFileHashCache.createFromStrings(fileHashes.build()));
+
+    RuleKey.Builder builder1 = ruleKeyBuilderFactory.newInstance(rule1);
+    RuleKey.Builder builder2 = ruleKeyBuilderFactory.newInstance(rule2);
+    rule1.appendToRuleKey(builder1);
+    rule2.appendToRuleKey(builder2);
+    RuleKey.Builder.RuleKeyPair pair1 = builder1.build();
+    RuleKey.Builder.RuleKeyPair pair2 = builder2.build();
+    assertEquals(pair1.getTotalRuleKey(), pair2.getTotalRuleKey());
+    assertEquals(pair1.getRuleKeyWithoutDeps(), pair2.getRuleKeyWithoutDeps());
+  }
+
+  @Test
+  public void testWhenNoJavacIsProvidedAJavacInMemoryStepIsAdded() {
+    BuildRuleResolver ruleResolver = new BuildRuleResolver();
+
+    BuildTarget libraryOneTarget = BuildTargetFactory.newInstance("//:libone");
+    DefaultJavaLibraryRule rule = ruleResolver.buildAndAddToIndex(
+        DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
+            .setBuildTarget(libraryOneTarget)
+            .addSrc(Paths.get("java/src/com/libone/Bar.java")));
+
+    ImmutableList.Builder<Step> stepsBuilder = ImmutableList.builder();
+    rule.createCommandsForJavac(
+        rule.getPathToOutputFile(),
+        ImmutableSet.<String>copyOf(rule.getTransitiveClasspathEntries().values()),
+        ImmutableSet.<String>copyOf(rule.getDeclaredClasspathEntries().values()),
+        JavacOptions.DEFAULTS,
+        BuildDependencies.FIRST_ORDER_ONLY,
+        Optional.<JavacStep.SuggestBuildRules>absent(),
+        stepsBuilder,
+        Optional.<Path>absent(),
+        libraryOneTarget
+    );
+
+
+    List<Step> steps = stepsBuilder.build();
+    assertEquals(steps.size(), 3);
+    assertTrue(steps.get(2) instanceof JavacInMemoryStep);
+  }
+
+  @Test
+  public void testWhenJavacIsProvidedAnExternalJavacStepIsAdded() {
+    BuildRuleResolver ruleResolver = new BuildRuleResolver();
+
+    BuildTarget libraryOneTarget = BuildTargetFactory.newInstance("//:libone");
+    DefaultJavaLibraryRule rule = ruleResolver.buildAndAddToIndex(
+        DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
+            .setBuildTarget(libraryOneTarget)
+            .addSrc(Paths.get("java/src/com/libone/Bar.java")));
+
+    ImmutableList.Builder<Step> stepsBuilder = ImmutableList.builder();
+    rule.createCommandsForJavac(
+        rule.getPathToOutputFile(),
+        ImmutableSet.<String>copyOf(rule.getTransitiveClasspathEntries().values()),
+        ImmutableSet.<String>copyOf(rule.getDeclaredClasspathEntries().values()),
+        JavacOptions.DEFAULTS,
+        BuildDependencies.FIRST_ORDER_ONLY,
+        Optional.<JavacStep.SuggestBuildRules>absent(),
+        stepsBuilder,
+        Optional.<Path>of(new File("javac").toPath()),
+        libraryOneTarget
+    );
+
+    List<Step> steps = stepsBuilder.build();
+    assertEquals(steps.size(), 3);
+    assertTrue(steps.get(2) instanceof ExternalJavacStep);
   }
 
 
@@ -1173,8 +1292,8 @@ public class DefaultJavaLibraryRuleTest {
       public BuildRule createRule(BuildTarget target) {
         return new PrebuiltJarRule(
             new FakeBuildRuleParams(target),
-            "MyJar",
-            Optional.<String>absent(),
+            Paths.get("MyJar"),
+            Optional.<Path>absent(),
             Optional.<String>absent());
       }
     },
@@ -1194,10 +1313,10 @@ public class DefaultJavaLibraryRuleTest {
       public BuildRule createRule(BuildTarget target) {
         return new DefaultJavaLibraryRule(
             new FakeBuildRuleParams(target),
-            ImmutableSet.<String>of("MyClass.java"),
+            ImmutableSet.<Path>of(Paths.get("MyClass.java")),
             ImmutableSet.<SourcePath>of(),
             Optional.<DummyRDotJava>absent(),
-            Optional.of("MyProguardConfig"),
+            Optional.of(Paths.get("MyProguardConfig")),
             /* exportedDeps */ ImmutableSet.<BuildRule>of(),
             JavacOptions.DEFAULTS);
       }
@@ -1281,15 +1400,15 @@ public class DefaultJavaLibraryRuleTest {
               buildTarget,
               /* deps */ ImmutableSortedSet.<BuildRule>of(),
               /* visibilityPatterns */ ImmutableSet.<BuildTargetPattern>of(),
-              projectFilesystem.getPathRelativizer(),
+              projectFilesystem.getAbsolutifier(),
               new FakeRuleKeyBuilderFactory()),
-          ImmutableSet.of(src),
+          ImmutableSet.of(Paths.get(src)),
           /* resources */ ImmutableSet.<SourcePath>of(),
           /* optionalDummyRDotJava */ Optional.<DummyRDotJava>absent(),
-          /* proguardConfig */ Optional.<String>absent(),
+          /* proguardConfig */ Optional.<Path>absent(),
           /* exortDeps */ ImmutableSet.<BuildRule>of(),
           options.build(),
-          /* manifestFile */ Optional.<String>absent());
+          /* manifestFile */ Optional.<Path>absent());
     }
 
     private JavacInMemoryStep lastJavacCommand(Iterable<Step> commands) {

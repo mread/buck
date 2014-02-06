@@ -53,6 +53,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -84,7 +85,7 @@ public class ExportFileTest {
             "cp example.html buck-out/gen/example.html"),
         steps,
         TestExecutionContext.newInstance());
-    assertEquals("buck-out/gen/example.html", exportFile.getPathToOutputFile());
+    assertEquals(Paths.get("buck-out/gen/example.html"), exportFile.getPathToOutputFile());
   }
 
   @Test
@@ -103,7 +104,7 @@ public class ExportFileTest {
             "cp example.html buck-out/gen/fish"),
         steps,
         TestExecutionContext.newInstance());
-    assertEquals("buck-out/gen/fish", exportFile.getPathToOutputFile());
+    assertEquals(Paths.get("buck-out/gen/fish"), exportFile.getPathToOutputFile());
   }
 
   @Test
@@ -122,7 +123,7 @@ public class ExportFileTest {
             "cp chips buck-out/gen/fish"),
         steps,
         TestExecutionContext.newInstance());
-    assertEquals("buck-out/gen/fish", exportFile.getPathToOutputFile());
+    assertEquals(Paths.get("buck-out/gen/fish"), exportFile.getPathToOutputFile());
   }
 
   @Test
@@ -132,7 +133,7 @@ public class ExportFileTest {
     args.out = Optional.of("cake");
     ExportFile exportFile = new ExportFile(params, args);
 
-    assertIterablesEquals(singleton("chips"), exportFile.getInputsToCompareToOutput());
+    assertIterablesEquals(singleton(Paths.get("chips")), exportFile.getInputsToCompareToOutput());
 
     args.src = Optional.of(
         new BuildTargetSourcePath(BuildTargetFactory.newInstance("//example:one")));
@@ -141,7 +142,8 @@ public class ExportFileTest {
 
     args.src = Optional.absent();
     exportFile = new ExportFile(params, args);
-    assertIterablesEquals(singleton("example.html"), exportFile.getInputsToCompareToOutput());
+    assertIterablesEquals(
+        singleton(Paths.get("example.html")), exportFile.getInputsToCompareToOutput());
   }
 
   private BuildContext getBuildContext(File root) {

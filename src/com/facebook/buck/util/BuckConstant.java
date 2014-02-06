@@ -17,12 +17,16 @@
 package com.facebook.buck.util;
 
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 public class BuckConstant {
 
   /**
    * The relative path to the directory where Buck will generate its files.
    */
   public static final String BUCK_OUTPUT_DIRECTORY = "buck-out";
+  public static final Path BUCK_OUTPUT_PATH = Paths.get("buck-out");
 
   // TODO(mbolin): The constants GEN_DIR, BIN_DIR, and ANNOTATION_DIR should be
   // package-private to the com.facebook.buck.rules directory. Currently, they are also used in the
@@ -30,12 +34,15 @@ public class BuckConstant {
   // than hardcoded therein. This ensures that shell commands stay build-rule-agnostic.
 
   public static final String GEN_DIR = BUCK_OUTPUT_DIRECTORY + "/gen";
+  public static final Path GEN_PATH = BUCK_OUTPUT_PATH.resolve("gen");
 
   public static final String BIN_DIR = BUCK_OUTPUT_DIRECTORY + "/bin";
+  public static final Path BIN_PATH = BUCK_OUTPUT_PATH.resolve("bin");
 
   public static final String ANNOTATION_DIR = BUCK_OUTPUT_DIRECTORY + "/annotation";
+  public static final Path ANNOTATION_PATH = BUCK_OUTPUT_PATH.resolve("annotation");
 
-  public static final String BUCK_TRACE_DIR = BUCK_OUTPUT_DIRECTORY + "/log/traces";
+  public static final Path BUCK_TRACE_DIR = BUCK_OUTPUT_PATH.resolve("log/traces");
 
   /**
    * This variable is package-private because conceptually, only parsing logic should be concerned

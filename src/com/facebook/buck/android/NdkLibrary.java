@@ -42,6 +42,7 @@ import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -72,12 +73,12 @@ public class NdkLibrary extends AbstractBuildable implements NativeLibraryBuilda
   private final Path buildArtifactsDirectory;
   private final Path genDirectory;
 
-  private final ImmutableSortedSet<String> sources;
+  private final ImmutableSortedSet<Path> sources;
   private final ImmutableList<String> flags;
 
   protected NdkLibrary(
       BuildTarget buildTarget,
-      Set<String> sources,
+      Set<Path> sources,
       List<String> flags,
       boolean isAsset) {
     this.isAsset = isAsset;
@@ -99,13 +100,13 @@ public class NdkLibrary extends AbstractBuildable implements NativeLibraryBuilda
   }
 
   @Override
-  public String getLibraryPath() {
-    return genDirectory.toString();
+  public Path getLibraryPath() {
+    return genDirectory;
   }
 
   @Override
   @Nullable
-  public String getPathToOutputFile() {
+  public Path getPathToOutputFile() {
     // An ndk_library() does not have a "primary output" at this time.
     return null;
   }
@@ -151,13 +152,12 @@ public class NdkLibrary extends AbstractBuildable implements NativeLibraryBuilda
     // TODO(#2493457): This rule uses the ndk-build script (part of the Android NDK), so the RuleKey
     // should incorporate which version of the NDK is used.
     return builder
-        .set("sources", sources)
         .set("flags", flags)
         .set("is_asset", isAsset());
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     return this.sources;
   }
 
@@ -168,7 +168,7 @@ public class NdkLibrary extends AbstractBuildable implements NativeLibraryBuilda
   public static class Builder extends AbstractBuildable.Builder implements SrcsAttributeBuilder {
 
     private boolean isAsset = false;
-    private Set<String> sources = Sets.newHashSet();
+    private Set<Path> sources = Sets.newHashSet();
     private ImmutableList.Builder<String> flags = ImmutableList.builder();
 
     private Builder(AbstractBuildRuleBuilderParams params) {
@@ -203,7 +203,7 @@ public class NdkLibrary extends AbstractBuildable implements NativeLibraryBuilda
     }
 
     @Override
-    public Builder addSrc(String source) {
+    public Builder addSrc(Path source) {
       this.sources.add(source);
       return this;
     }

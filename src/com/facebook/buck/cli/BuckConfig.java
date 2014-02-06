@@ -74,8 +74,9 @@ import javax.annotation.concurrent.Immutable;
 /**
  * Structured representation of data read from a {@code .buckconfig} file.
  */
+@Beta
 @Immutable
-class BuckConfig {
+public class BuckConfig {
   private static final String ALIAS_SECTION_HEADER = "alias";
 
   /**
@@ -560,7 +561,7 @@ class BuckConfig {
     if (!cacheDir.isEmpty() && cacheDir.charAt(0) == '/') {
       return Paths.get(cacheDir);
     }
-    return projectFilesystem.getPathRelativizer().apply(cacheDir);
+    return projectFilesystem.getAbsolutifier().apply(Paths.get(cacheDir));
   }
 
   public Optional<Long> getCacheDirMaxSizeBytes() {
@@ -615,6 +616,21 @@ class BuckConfig {
 
   public Optional<String> getMaximumNdkVersion() {
     return getValue("ndk", "max_version");
+  }
+
+  public Optional<Path> getJavac() {
+    Optional<String> path = getValue("tools", "javac");
+    if (path.isPresent()) {
+      File javac = new File(path.get());
+      if (!javac.exists()) {
+        throw new HumanReadableException("Javac does not exist: " + javac.getPath());
+      }
+      if (!javac.canExecute()) {
+        throw new HumanReadableException("Javac is not executable: " + javac.getPath());
+      }
+      return Optional.of(javac.toPath());
+    }
+    return Optional.absent();
   }
 
   public Optional<String> getValue(String sectionName, String propertyName) {

@@ -31,11 +31,11 @@ import com.facebook.buck.step.fs.MkdirStep;
 import com.facebook.buck.util.BuckConstant;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSortedSet;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -96,15 +96,14 @@ public class ExportFile extends AbstractBuildable {
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     return SourcePaths.filterInputsToCompareToOutput(Collections.singleton(src));
   }
 
   @Override
   public RuleKey.Builder appendDetailsToRuleKey(RuleKey.Builder builder) {
     return builder
-        .set("out", out.toString())
-        .setSourcePaths("src", ImmutableSortedSet.of(src));
+        .set("out", out.toString());
   }
 
   @Override
@@ -120,7 +119,7 @@ public class ExportFile extends AbstractBuildable {
   }
 
   @Override
-  public String getPathToOutputFile() {
-    return out.toString();
+  public Path getPathToOutputFile() {
+    return out;
   }
 }

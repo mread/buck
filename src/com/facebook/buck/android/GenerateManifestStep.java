@@ -28,7 +28,6 @@ import com.facebook.buck.util.environment.Platform;
 import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -36,20 +35,21 @@ import com.google.common.io.Files;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 
 public class GenerateManifestStep implements Step {
 
   private static final int BASE_SDK_LEVEL = 1;
 
-  private String skeletonManifestPath;
-  private ImmutableSet<String> libraryManifestPaths;
-  private String outManifestPath;
+  private Path skeletonManifestPath;
+  private ImmutableSet<Path> libraryManifestPaths;
+  private Path outManifestPath;
 
   public GenerateManifestStep(
-      String skeletonManifestPath,
-      ImmutableSet<String> libraryManifestPaths,
-      String outManifestPath) {
+      Path skeletonManifestPath,
+      ImmutableSet<Path> libraryManifestPaths,
+      Path outManifestPath) {
     this.skeletonManifestPath = Preconditions.checkNotNull(skeletonManifestPath);
     this.libraryManifestPaths = ImmutableSet.copyOf(libraryManifestPaths);
     this.outManifestPath = Preconditions.checkNotNull(outManifestPath);
@@ -58,11 +58,11 @@ public class GenerateManifestStep implements Step {
   @Override
   public int execute(ExecutionContext context) {
 
-    if (Strings.isNullOrEmpty(skeletonManifestPath)) {
+    if (skeletonManifestPath.getNameCount() == 0) {
       throw new HumanReadableException("Skeleton manifest filepath is missing");
     }
 
-    if (Strings.isNullOrEmpty(outManifestPath)) {
+    if (outManifestPath.getNameCount() == 0) {
       throw new HumanReadableException("Output Manifest filepath is missing");
     }
 
@@ -72,7 +72,7 @@ public class GenerateManifestStep implements Step {
     }
 
     try {
-      Files.createParentDirs(new File(outManifestPath));
+      Files.createParentDirs(outManifestPath.toFile());
     } catch (IOException e) {
       e.printStackTrace(context.getStdErr());
       return 1;
@@ -80,11 +80,11 @@ public class GenerateManifestStep implements Step {
 
     List<File> libraryManifestFiles = Lists.newArrayList();
 
-    for (String path : libraryManifestPaths) {
-      libraryManifestFiles.add(new File(path));
+    for (Path path : libraryManifestPaths) {
+      libraryManifestFiles.add(path.toFile());
     }
 
-    File skeletonManifestFile = new File(skeletonManifestPath);
+    File skeletonManifestFile = skeletonManifestPath.toFile();
 
     ICallback callback = new ICallback() {
       @Override
@@ -97,7 +97,7 @@ public class GenerateManifestStep implements Step {
 
     ManifestMerger merger = new ManifestMerger(log, callback);
 
-    File outManifestFile = new File(outManifestPath);
+    File outManifestFile = outManifestPath.toFile();
     if (!merger.process(
         outManifestFile,
         skeletonManifestFile,

@@ -17,7 +17,7 @@
 package com.facebook.buck.step;
 
 import com.facebook.buck.event.BuckEventBusFactory;
-import com.facebook.buck.testutil.IdentityPathRelativizer;
+import com.facebook.buck.testutil.IdentityPathAbsolutifier;
 import com.facebook.buck.testutil.TestConsole;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.environment.Platform;
@@ -48,8 +48,8 @@ public class TestExecutionContext {
         return path;
       }
       @Override
-      public Function<String, Path> getPathRelativizer() {
-        return IdentityPathRelativizer.getIdentityRelativizer();
+      public Function<Path, Path> getAbsolutifier() {
+        return IdentityPathAbsolutifier.getIdentityAbsolutifier();
       }
     })
     .build();

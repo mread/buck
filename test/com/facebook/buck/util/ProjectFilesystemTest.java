@@ -24,6 +24,7 @@ import com.facebook.buck.testutil.WatchEvents;
 import com.google.common.base.Charsets;
 import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
+import com.google.common.io.CharStreams;
 import com.google.common.io.Files;
 
 import org.junit.Before;
@@ -118,6 +119,21 @@ public class ProjectFilesystemTest {
   }
 
   @Test
+  public void getReaderIfFileExists() throws IOException {
+    File file = tmp.newFile("foo.txt");
+    Files.write("fooooo\nbar\nbaz\n", file, Charsets.UTF_8);
+    assertEquals(
+        "fooooo\nbar\nbaz\n",
+        CharStreams.toString(filesystem.getReaderIfFileExists(Paths.get("foo.txt")).get())
+    );
+  }
+
+  @Test
+  public void getReaderIfFileExistsNoFile() throws IOException {
+    assertEquals(Optional.absent(), filesystem.getReaderIfFileExists(Paths.get("foo.txt")));
+  }
+
+  @Test
   public void testGetFileSize() throws IOException {
     File wordsFile = tmp.newFile("words.txt");
     String content = "Here\nare\nsome\nwords.\n";
@@ -195,8 +211,8 @@ public class ProjectFilesystemTest {
 
   @Test
   public void testDeleteFileAtPath() throws IOException {
-    String path = "foo.txt";
-    File file = tmp.newFile(path);
+    Path path = Paths.get("foo.txt");
+    File file = tmp.newFile(path.toString());
     assertTrue(file.exists());
     filesystem.deleteFileAtPath(path);
     assertFalse(file.exists());

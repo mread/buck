@@ -29,6 +29,7 @@ import com.facebook.buck.step.Step;
 import com.facebook.buck.step.TestExecutionContext;
 import com.facebook.buck.testutil.MoreAsserts;
 import com.google.common.base.Function;
+import com.google.common.base.Functions;
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
 import com.google.common.base.Strings;
@@ -55,12 +56,12 @@ public class DummyRDotJavaTest {
         AndroidResourceRule.newAndroidResourceRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(BuildTargetFactory.newInstance("//android_res/com/example:res1"))
             .setRDotJavaPackage("com.facebook")
-            .setRes("android_res/com/example/res1"));
+            .setRes(Paths.get("android_res/com/example/res1")));
     AndroidResourceRule resourceRule2 = ruleResolver.buildAndAddToIndex(
         AndroidResourceRule.newAndroidResourceRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(BuildTargetFactory.newInstance("//android_res/com/example:res2"))
             .setRDotJavaPackage("com.facebook")
-            .setRes("android_res/com/example/res2"));
+            .setRes(Paths.get("android_res/com/example/res2")));
 
     DummyRDotJava dummyRDotJava = new DummyRDotJava(
         ImmutableList.<HasAndroidResourceDeps>of(resourceRule1, resourceRule2),
@@ -98,7 +99,7 @@ public class DummyRDotJavaTest {
   public void testRDotJavaBinFolder() {
     DummyRDotJava dummyRDotJava = new DummyRDotJava(ImmutableList.<HasAndroidResourceDeps>of(),
         BuildTargetFactory.newInstance("//java/com/example:library"));
-    assertEquals("buck-out/bin/java/com/example/__library_rdotjava_bin__",
+    assertEquals(Paths.get("buck-out/bin/java/com/example/__library_rdotjava_bin__"),
         dummyRDotJava.getRDotJavaBinFolder());
   }
 
@@ -121,10 +122,12 @@ public class DummyRDotJavaTest {
 
   private static String javacInMemoryDescription(String rDotJavaClassesFolder,
                                                  String pathToAbiOutputFile) {
-    Set<String> javaSourceFiles =
-        ImmutableSet.of("buck-out/bin/java/base/__rule_rdotjava_src__/com.facebook/R.java");
+    Set<Path> javaSourceFiles = ImmutableSet.of(
+        Paths.get("buck-out/bin/java/base/__rule_rdotjava_src__/com.facebook/R.java"));
     return UberRDotJavaUtil.createJavacInMemoryCommandForRDotJavaFiles(
-        javaSourceFiles, rDotJavaClassesFolder, Optional.of(pathToAbiOutputFile))
+        javaSourceFiles,
+        Paths.get(rDotJavaClassesFolder),
+        Optional.of(Paths.get(pathToAbiOutputFile)))
         .getDescription(TestExecutionContext.newInstance());
   }
 
@@ -132,12 +135,14 @@ public class DummyRDotJavaTest {
       List<AndroidResourceRule> resourceRules,
       String rDotJavaSourceFolder) {
     List<String> sortedSymbolsFiles = FluentIterable.from(resourceRules)
-        .transform(new Function<AndroidResourceRule, String>() {
+        .transform(new Function<AndroidResourceRule, Path>() {
           @Override
-          public String apply(AndroidResourceRule input) {
+          public Path apply(AndroidResourceRule input) {
             return input.getPathToTextSymbolsFile();
           }
-        }).toList();
+        })
+        .transform(Functions.toStringFunction())
+        .toList();
     return "android-res-merge " + Joiner.on(' ').join(sortedSymbolsFiles) +
         " -o " + rDotJavaSourceFolder;
   }

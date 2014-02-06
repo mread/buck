@@ -33,6 +33,8 @@ import com.google.common.collect.ImmutableSet;
 
 import org.junit.Test;
 
+import java.nio.file.Paths;
+
 public class AndroidTransitiveDependencyGraphTest {
 
   /**
@@ -48,26 +50,26 @@ public class AndroidTransitiveDependencyGraphTest {
     PrebuiltJarRule guavaRule = ruleResolver.buildAndAddToIndex(
         PrebuiltJarRule.newPrebuiltJarRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//third_party/guava:guava"))
-        .setBinaryJar("third_party/guava/guava-10.0.1.jar")
+        .setBinaryJar(Paths.get("third_party/guava/guava-10.0.1.jar"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     PrebuiltJarRule jsr305Rule = ruleResolver.buildAndAddToIndex(
         PrebuiltJarRule.newPrebuiltJarRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//third_party/jsr-305:jsr-305"))
-        .setBinaryJar("third_party/jsr-305/jsr305.jar")
+        .setBinaryJar(Paths.get("third_party/jsr-305/jsr305.jar"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     BuildRule ndkLibrary = ruleResolver.buildAndAddToIndex(
         NdkLibrary.newNdkLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(BuildTargetFactory.newInstance("//java/com/facebook/native_library:library"))
-            .addSrc("Android.mk")
+            .addSrc(Paths.get("Android.mk"))
             .setIsAsset(false)
             .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     BuildRule prebuiltNativeLibraryBuild = ruleResolver.buildAndAddToIndex(
         PrebuiltNativeLibrary.newPrebuiltNativeLibrary(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//java/com/facebook/prebuilt_native_library:library"))
-        .setNativeLibsDirectory("/java/com/facebook/prebuilt_native_library/libs")
+        .setNativeLibsDirectory(Paths.get("/java/com/facebook/prebuilt_native_library/libs"))
         .setIsAsset(true)
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
@@ -82,15 +84,15 @@ public class AndroidTransitiveDependencyGraphTest {
     AndroidResourceRule manifestRule = ruleResolver.buildAndAddToIndex(
         AndroidResourceRule.newAndroidResourceRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//java/src/com/facebook:res"))
-        .setManifestFile("java/src/com/facebook/module/AndroidManifest.xml")
-        .setAssetsDirectory("assets/"));
+        .setManifestFile(Paths.get("java/src/com/facebook/module/AndroidManifest.xml"))
+        .setAssetsDirectory(Paths.get("assets")));
 
     BuildTarget keystoreTarget = BuildTargetFactory.newInstance("//keystore:debug");
     ruleResolver.buildAndAddToIndex(
         Keystore.newKeystoreBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(keystoreTarget)
-        .setStore("keystore/debug.keystore")
-        .setProperties("keystore/debug.keystore.properties")
+        .setStore(Paths.get("keystore/debug.keystore"))
+        .setProperties(Paths.get("keystore/debug.keystore.properties"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     AndroidBinaryRule binaryRule = ruleResolver.buildAndAddToIndex(
@@ -125,7 +127,7 @@ public class AndroidTransitiveDependencyGraphTest {
     assertEquals(
         "Because assets directory was passed an AndroidResourceRule it should be added to the " +
             "transitive dependencies",
-        ImmutableSet.of("assets/"),
+        ImmutableSet.of(Paths.get("assets")),
         transitiveDeps.assetsDirectories);
     assertEquals(
         "There should be one NativeLibraryBuildable that is an asset.",
@@ -134,7 +136,7 @@ public class AndroidTransitiveDependencyGraphTest {
     assertEquals(
         "Because manifest file was passed an AndroidResourceRule it should be added to the " +
             "transitive dependencies",
-        ImmutableSet.of("java/src/com/facebook/module/AndroidManifest.xml"),
+        ImmutableSet.of(Paths.get("java/src/com/facebook/module/AndroidManifest.xml")),
         transitiveDeps.manifestFiles);
     assertEquals(
         "Because a native library was declared as a dependency, it should be added to the " +
@@ -161,15 +163,15 @@ public class AndroidTransitiveDependencyGraphTest {
     ruleResolver.buildAndAddToIndex(
         AndroidLibraryRule.newAndroidLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(androidLibraryKeystoreTarget)
-        .addSrc("java/com/facebook/keystore/Base.java")
+        .addSrc(Paths.get("java/com/facebook/keystore/Base.java"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     BuildTarget keystoreTarget = new BuildTarget("//keystore", "debug");
     ruleResolver.buildAndAddToIndex(
         Keystore.newKeystoreBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(keystoreTarget)
-        .setStore("keystore/debug.keystore")
-        .setProperties("keystore/debug.keystore.properties")
+        .setStore(Paths.get("keystore/debug.keystore"))
+        .setProperties(Paths.get("keystore/debug.keystore.properties"))
         .addDep(androidLibraryKeystoreTarget)
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
@@ -177,7 +179,7 @@ public class AndroidTransitiveDependencyGraphTest {
     ruleResolver.buildAndAddToIndex(
         AndroidLibraryRule.newAndroidLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(androidLibraryTarget)
-        .addSrc("java/com/facebook/base/Base.java")
+        .addSrc(Paths.get("java/com/facebook/base/Base.java"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     AndroidBinaryRule androidBinaryRule = ruleResolver.buildAndAddToIndex(

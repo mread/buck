@@ -31,7 +31,6 @@ import com.facebook.buck.rules.Buildable;
 import com.facebook.buck.rules.BuildableContext;
 import com.facebook.buck.rules.BuildableProperties;
 import com.facebook.buck.rules.DoNotUseAbstractBuildable;
-import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.step.Step;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.google.common.annotations.VisibleForTesting;
@@ -43,22 +42,17 @@ import com.google.common.collect.Iterables;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 
 public class PythonBinaryRule extends DoNotUseAbstractBuildable implements BinaryBuildRule {
 
   private final static BuildableProperties OUTPUT_TYPE = new BuildableProperties(PACKAGING);
-  private final String main;
+  private final Path main;
 
-  protected PythonBinaryRule(BuildRuleParams buildRuleParams, String main) {
+  protected PythonBinaryRule(BuildRuleParams buildRuleParams, Path main) {
     super(buildRuleParams);
     this.main = Preconditions.checkNotNull(main);
-  }
-
-  @Override
-  public RuleKey.Builder appendToRuleKey(RuleKey.Builder builder) throws IOException {
-    return super.appendToRuleKey(builder)
-        .set("main", main);
   }
 
   @Override
@@ -78,7 +72,7 @@ public class PythonBinaryRule extends DoNotUseAbstractBuildable implements Binar
             getPythonPathEntries(),
             projectFilesystem.getAbsolutifier()));
     return ImmutableList.of(String.format("PYTHONPATH=%s", pythonPath), "python",
-        projectFilesystem.getPathRelativizer().apply(main).toString());
+        projectFilesystem.getAbsolutifier().apply(main).toString());
   }
 
   @VisibleForTesting
@@ -110,7 +104,7 @@ public class PythonBinaryRule extends DoNotUseAbstractBuildable implements Binar
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     if (main != null) {
       return ImmutableList.of(main);
     } else {
@@ -132,7 +126,7 @@ public class PythonBinaryRule extends DoNotUseAbstractBuildable implements Binar
 
   public static class Builder extends AbstractBuildRuleBuilder<PythonBinaryRule> {
 
-    private String main;
+    private Path main;
 
     private Builder(AbstractBuildRuleBuilderParams params) {
       super(params);
@@ -143,7 +137,7 @@ public class PythonBinaryRule extends DoNotUseAbstractBuildable implements Binar
       return new PythonBinaryRule(createBuildRuleParams(ruleResolver), main);
     }
 
-    public Builder setMain(String main) {
+    public Builder setMain(Path main) {
       this.main = main;
       return this;
     }

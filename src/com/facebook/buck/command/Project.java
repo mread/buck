@@ -106,6 +106,7 @@ public class Project {
    * users to target
    */
   public static final String ANDROID_GEN_DIR = BuckConstant.BUCK_OUTPUT_DIRECTORY + "/android";
+  public static final Path ANDROID_GEN_PATH = BuckConstant.BUCK_OUTPUT_PATH.resolve("android");
 
   /**
    * Prefix for build targets whose output will be in {@link #ANDROID_GEN_DIR}.
@@ -449,7 +450,7 @@ public class Project {
         NdkLibrary ndkLibrary = (NdkLibrary) projectRule.getBuildable();
         module.isAndroidLibraryProject = true;
         module.keystorePath = null;
-        module.nativeLibs = Paths.get(relativePath).relativize(Paths.get(ndkLibrary.getLibraryPath())).toString();
+        module.nativeLibs = Paths.get(relativePath).relativize(ndkLibrary.getLibraryPath()).toString();
       } else if (projectRule instanceof AndroidResourceRule) {
         AndroidResourceRule androidResourceRule = (AndroidResourceRule)projectRule;
         module.resFolder = createRelativePath(androidResourceRule.getRes(), target);
@@ -466,7 +467,8 @@ public class Project {
 
         // getKeystore() returns a path relative to the project root, but an IntelliJ module
         // expects the path to the keystore to be relative to the module root.
-        module.keystorePath = Paths.get(relativePath).relativize(Paths.get(keystoreProperties.getKeystore())).toString();
+        module.keystorePath = Paths.get(relativePath).relativize(keystoreProperties.getKeystore())
+            .toString();
       } else {
         module.isAndroidLibraryProject = true;
         module.keystorePath = null;
@@ -516,10 +518,10 @@ public class Project {
       JavaLibraryRule javaLibraryRule = (JavaLibraryRule)projectRule;
       AnnotationProcessingData processingData = javaLibraryRule.getAnnotationProcessingData();
 
-      String annotationGenSrc = processingData.getGeneratedSourceFolderName();
+      Path annotationGenSrc = processingData.getGeneratedSourceFolderName();
       if (annotationGenSrc != null) {
         module.annotationGenPath =
-            "/" + Paths.get(basePathWithSlash).relativize(Paths.get(annotationGenSrc)).toString();
+            "/" + Paths.get(basePathWithSlash).relativize(annotationGenSrc).toString();
         module.annotationGenIsForTest = !hasSourceFoldersForSrcRule;
       }
     }
@@ -857,7 +859,7 @@ public class Project {
     String name;
     if (rule instanceof PrebuiltJarRule) {
       PrebuiltJarRule prebuiltJarRule = (PrebuiltJarRule)rule;
-      String binaryJar = prebuiltJarRule.getBinaryJar();
+      String binaryJar = prebuiltJarRule.getBinaryJar().toString();
       return getIntellijNameForBinaryJar(binaryJar);
     } else {
       String basePath = rule.getBuildTarget().getBasePath();
@@ -887,14 +889,14 @@ public class Project {
    * @param pathRelativeToProjectRoot if {@code null}, then this method returns {@code null}
    * @param target
    */
-  private static String createRelativePath(@Nullable String pathRelativeToProjectRoot,
+  private static String createRelativePath(@Nullable Path pathRelativeToProjectRoot,
       BuildTarget target) {
     if (pathRelativeToProjectRoot == null) {
       return null;
     }
     String directoryPath = target.getBasePath();
-    Preconditions.checkArgument(pathRelativeToProjectRoot.startsWith(directoryPath));
-    return pathRelativeToProjectRoot.substring(directoryPath.length());
+    Preconditions.checkArgument(pathRelativeToProjectRoot.toString().startsWith(directoryPath));
+    return pathRelativeToProjectRoot.toString().substring(directoryPath.length());
   }
 
   private void writeJsonConfig(File jsonTempFile, List<Module> modules) throws IOException {
@@ -1030,8 +1032,12 @@ public class Project {
 
     private SerializablePrebuiltJarRule(PrebuiltJarRule rule) {
       this.name = getIntellijNameForRule(rule, null /* basePathToAliasMap */);
-      this.binaryJar = rule.getBinaryJar();
-      this.sourceJar = rule.getSourceJar().orNull();
+      this.binaryJar = rule.getBinaryJar().toString();
+      if (rule.getSourceJar().isPresent()) {
+        this.sourceJar = rule.getSourceJar().get().toString();
+      } else {
+        this.sourceJar = null;
+      }
       this.javadocUrl = rule.getJavadocUrl().orNull();
     }
 

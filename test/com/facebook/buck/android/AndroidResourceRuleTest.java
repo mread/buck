@@ -16,6 +16,7 @@
 
 package com.facebook.buck.android;
 
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.facebook.buck.java.Keystore;
@@ -28,18 +29,25 @@ import com.facebook.buck.rules.BuildRuleResolver;
 import com.facebook.buck.rules.FakeAbstractBuildRuleBuilderParams;
 import com.facebook.buck.rules.FakeBuildRuleParams;
 import com.facebook.buck.rules.FileSourcePath;
+import com.facebook.buck.rules.RuleKey;
+import com.facebook.buck.testutil.FakeFileHashCache;
 import com.facebook.buck.testutil.MoreAsserts;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 
 import org.junit.Test;
+
+import java.io.IOException;
+import java.nio.file.Paths;
 
 
 public class AndroidResourceRuleTest {
 
   @Test
   public void testGetInputsToCompareToOutput() {
-    // Create an android_library rule with all sorts of input files that it depends on. If any of
+    // Create an android_resource rule with all sorts of input files that it depends on. If any of
     // these files is modified, then this rule should not be cached.
     BuildTarget buildTarget = new BuildTarget("//java/src/com/facebook/base", "res");
     BuildRuleParams buildRuleParams = new FakeBuildRuleParams(
@@ -47,18 +55,18 @@ public class AndroidResourceRuleTest {
         ImmutableSortedSet.<BuildRule>of());
     AndroidResourceRule androidResourceRule = new AndroidResourceRule(
         buildRuleParams,
-        "java/src/com/facebook/base/res",
+        Paths.get("java/src/com/facebook/base/res"),
         ImmutableSortedSet.of(
-            "java/src/com/facebook/base/res/drawable/E.xml",
-            "java/src/com/facebook/base/res/drawable/A.xml",
-            "java/src/com/facebook/base/res/drawable/C.xml"),
+            Paths.get("java/src/com/facebook/base/res/drawable/E.xml"),
+            Paths.get("java/src/com/facebook/base/res/drawable/A.xml"),
+            Paths.get("java/src/com/facebook/base/res/drawable/C.xml")),
         "com.facebook",
-        "java/src/com/facebook/base/assets",
+        Paths.get("java/src/com/facebook/base/assets"),
         ImmutableSortedSet.of(
-            "java/src/com/facebook/base/assets/drawable/F.xml",
-            "java/src/com/facebook/base/assets/drawable/B.xml",
-            "java/src/com/facebook/base/assets/drawable/D.xml"),
-        "java/src/com/facebook/base/AndroidManifest.xml",
+            Paths.get("java/src/com/facebook/base/assets/drawable/F.xml"),
+            Paths.get("java/src/com/facebook/base/assets/drawable/B.xml"),
+            Paths.get("java/src/com/facebook/base/assets/drawable/D.xml")),
+        Paths.get("java/src/com/facebook/base/AndroidManifest.xml"),
         /* hasWhitelisted */ false);
 
     // Test getInputsToCompareToOutput().
@@ -66,14 +74,62 @@ public class AndroidResourceRuleTest {
         "getInputsToCompareToOutput() should return an alphabetically sorted list of all input " +
         "files that contribute to this android_resource() rule.",
         ImmutableList.of(
-            "java/src/com/facebook/base/res/drawable/A.xml",
-            "java/src/com/facebook/base/res/drawable/C.xml",
-            "java/src/com/facebook/base/res/drawable/E.xml",
-            "java/src/com/facebook/base/assets/drawable/B.xml",
-            "java/src/com/facebook/base/assets/drawable/D.xml",
-            "java/src/com/facebook/base/assets/drawable/F.xml",
-            "java/src/com/facebook/base/AndroidManifest.xml"),
+            Paths.get("java/src/com/facebook/base/AndroidManifest.xml"),
+            Paths.get("java/src/com/facebook/base/assets/drawable/B.xml"),
+            Paths.get("java/src/com/facebook/base/assets/drawable/D.xml"),
+            Paths.get("java/src/com/facebook/base/assets/drawable/F.xml"),
+            Paths.get("java/src/com/facebook/base/res/drawable/A.xml"),
+            Paths.get("java/src/com/facebook/base/res/drawable/C.xml"),
+            Paths.get("java/src/com/facebook/base/res/drawable/E.xml")),
         androidResourceRule.getInputsToCompareToOutput());
+  }
+
+  @Test
+  public void testRuleKeyForDifferentInputFilenames() throws IOException {
+    BuildTarget buildTarget = new BuildTarget("//java/src/com/facebook/base", "res");
+    BuildRuleParams buildRuleParams = new FakeBuildRuleParams(
+        buildTarget,
+        ImmutableSortedSet.<BuildRule>of());
+    AndroidResourceRule androidResourceRule1 = new AndroidResourceRule(
+        buildRuleParams,
+        Paths.get("java/src/com/facebook/base/res"),
+        ImmutableSortedSet.of(
+            Paths.get("java/src/com/facebook/base/res/drawable/A.xml")),
+        "com.facebook",
+        Paths.get("java/src/com/facebook/base/assets"),
+        ImmutableSortedSet.of(
+            Paths.get("java/src/com/facebook/base/assets/drawable/B.xml")),
+        Paths.get("java/src/com/facebook/base/AndroidManifest.xml"),
+        /* hasWhitelisted */ false);
+    AndroidResourceRule androidResourceRule2 = new AndroidResourceRule(
+        buildRuleParams,
+        Paths.get("java/src/com/facebook/base/res"),
+        ImmutableSortedSet.of(
+            Paths.get("java/src/com/facebook/base/res/drawable/C.xml")),
+        "com.facebook",
+        Paths.get("java/src/com/facebook/base/assets"),
+        ImmutableSortedSet.of(
+            Paths.get("java/src/com/facebook/base/assets/drawable/B.xml")),
+        Paths.get("java/src/com/facebook/base/AndroidManifest.xml"),
+        /* hasWhitelisted */ false);
+
+    String commonHash = Strings.repeat("a", 40);
+    FakeFileHashCache fakeFileHashCache = FakeFileHashCache.createFromStrings(ImmutableMap.of(
+        "java/src/com/facebook/base/res/drawable/A.xml", commonHash,
+        "java/src/com/facebook/base/assets/drawable/B.xml", Strings.repeat("b", 40),
+        "java/src/com/facebook/base/res/drawable/C.xml", commonHash,
+        "java/src/com/facebook/base/AndroidManifest.xml", Strings.repeat("d", 40)));
+
+    RuleKey.Builder.RuleKeyPair pair1 = androidResourceRule1.appendToRuleKey(
+        RuleKey.builder(androidResourceRule1, fakeFileHashCache))
+        .build();
+    RuleKey.Builder.RuleKeyPair pair2 = androidResourceRule2.appendToRuleKey(
+        RuleKey.builder(androidResourceRule2, fakeFileHashCache))
+        .build();
+
+    assertNotEquals("The two android_resource rules should have different rule keys.",
+        pair1.getRuleKeyWithoutDeps(),
+        pair2.getRuleKeyWithoutDeps());
   }
 
   /**
@@ -98,27 +154,27 @@ public class AndroidResourceRuleTest {
     AndroidResourceRule c = ruleResolver.buildAndAddToIndex(
         AndroidResourceRule.newAndroidResourceRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(BuildTargetFactory.newInstance("//:c"))
-            .setRes("res_c")
+            .setRes(Paths.get("res_c"))
             .setRDotJavaPackage("com.facebook"));
 
     AndroidResourceRule b = ruleResolver.buildAndAddToIndex(
         AndroidResourceRule.newAndroidResourceRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//:b"))
-        .setRes("res_b")
+        .setRes(Paths.get("res_b"))
         .setRDotJavaPackage("com.facebook")
         .addDep(BuildTargetFactory.newInstance("//:c")));
 
     AndroidResourceRule d = ruleResolver.buildAndAddToIndex(
         AndroidResourceRule.newAndroidResourceRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(BuildTargetFactory.newInstance("//:d"))
-            .setRes("res_d")
+            .setRes(Paths.get("res_d"))
             .setRDotJavaPackage("com.facebook")
             .addDep(BuildTargetFactory.newInstance("//:c")));
 
     AndroidResourceRule a = ruleResolver.buildAndAddToIndex(
         AndroidResourceRule.newAndroidResourceRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//:a"))
-        .setRes("res_a")
+        .setRes(Paths.get("res_a"))
         .setRDotJavaPackage("com.facebook")
         .addDep(BuildTargetFactory.newInstance("//:b"))
         .addDep(BuildTargetFactory.newInstance("//:c"))
@@ -143,8 +199,8 @@ public class AndroidResourceRuleTest {
     ruleResolver.buildAndAddToIndex(
         Keystore.newKeystoreBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(keystoreTarget)
-        .setStore("keystore/debug.keystore")
-        .setProperties("keystore/debug.keystore.properties")
+        .setStore(Paths.get("keystore/debug.keystore"))
+        .setProperties(Paths.get("keystore/debug.keystore.properties"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
     AndroidBinaryRule e = ruleResolver.buildAndAddToIndex(
         AndroidBinaryRule.newAndroidBinaryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())

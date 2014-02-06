@@ -17,7 +17,7 @@
 package com.facebook.buck.android;
 
 import com.facebook.buck.android.FilterResourcesStep.ResourceFilter;
-import com.facebook.buck.android.UberRDotJavaBuildable.ResourceCompressionMode;
+import com.facebook.buck.android.UberRDotJava.ResourceCompressionMode;
 import com.facebook.buck.dalvik.ZipSplitter;
 import com.facebook.buck.java.Classpaths;
 import com.facebook.buck.model.BuildTarget;
@@ -27,7 +27,7 @@ import com.facebook.buck.rules.BuildRule;
 import com.facebook.buck.rules.BuildRuleParams;
 import com.facebook.buck.rules.BuildRuleResolver;
 import com.facebook.buck.rules.BuildRuleType;
-import com.facebook.buck.rules.InstallableBuildRule;
+import com.facebook.buck.rules.InstallableApk;
 import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.rules.SourcePath;
 import com.facebook.buck.util.HumanReadableException;
@@ -37,12 +37,8 @@ import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.Sets;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Set;
 
 
 /**
@@ -66,7 +62,7 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
       SourcePath manifest,
       AndroidBinaryRule apkUnderTest,
       ImmutableSet<BuildRule> buildRulesToExcludeFromDex,
-      UberRDotJavaBuildable uberRDotJavaBuildable,
+      UberRDotJava uberRDotJava,
       AaptPackageResources aaptPackageResourcesBuildable,
       AndroidResourceDepsFinder androidResourceDepsFinder,
       ImmutableSortedSet<BuildRule> classpathDepsForInstrumentationApk,
@@ -87,7 +83,7 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
         apkUnderTest.isUseAndroidProguardConfigWithOptimizations(),
         apkUnderTest.getProguardConfig(),
         apkUnderTest.getResourceCompressionMode(),
-        apkUnderTest.getPrimaryDexSubstrings(),
+        apkUnderTest.getPrimaryDexPatterns(),
         apkUnderTest.getLinearAllocHardLimit(),
         apkUnderTest.getPrimaryDexClassesFile(),
         apkUnderTest.getCpuFilters(),
@@ -98,7 +94,7 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
         // logic is used for an android_instrumentation_apk().
         /* preDexDeps */ ImmutableSet.<IntermediateDexRule>of(),
 
-        uberRDotJavaBuildable,
+        uberRDotJava,
         aaptPackageResourcesBuildable,
         apkUnderTest.getPreprocessJavaClassesDeps(),
         apkUnderTest.getPreprocessJavaClassesBash(),
@@ -143,7 +139,7 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
       BuildRule apkRule = ruleResolver.get(this.apk);
       if (apkRule == null) {
         throw new HumanReadableException("Must specify apk for " + getBuildTarget());
-      } else if (!(apkRule instanceof InstallableBuildRule)) {
+      } else if (!(apkRule.getBuildable() instanceof InstallableApk)) {
         throw new HumanReadableException(
             "In %s, apk='%s' must be an android_binary() or apk_genrule() but was %s().",
             getBuildTarget(),
@@ -153,7 +149,8 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
 
       BuildRuleParams originalParams = createBuildRuleParams(ruleResolver);
       final ImmutableSortedSet<BuildRule> originalDeps = originalParams.getDeps();
-      final AndroidBinaryRule apkUnderTest = getUnderlyingApk((InstallableBuildRule) apkRule);
+      final AndroidBinaryRule apkUnderTest = getUnderlyingApk(
+          (InstallableApk) apkRule.getBuildable());
 
       // Create the AndroidBinaryGraphEnhancer for this rule.
       ImmutableSet<BuildRule> buildRulesToExcludeFromDex = ImmutableSet.<BuildRule>builder()
@@ -199,16 +196,6 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
           }
           return allResources.build();
         }
-
-        @Override
-        protected Set<HasAndroidResourceDeps> findMyAndroidResourceDepsUnsorted() {
-          Collection<BuildRule> apk = Collections.<BuildRule>singleton(apkUnderTest);
-          Set<HasAndroidResourceDeps> originalResources =
-              UberRDotJavaUtil.getAndroidResourceDepsUnsorted(apk);
-          Set<HasAndroidResourceDeps> instrumentationResources =
-              UberRDotJavaUtil.getAndroidResourceDepsUnsorted(originalDeps);
-          return Sets.difference(instrumentationResources, originalResources);
-        }
       };
 
       AndroidBinaryGraphEnhancer.Result result = graphEnhancer.addBuildablesToCreateAaptResources(
@@ -219,13 +206,14 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
           manifest,
           /* packageType */ PackageType.INSTRUMENTED,
           apkUnderTest.getCpuFilters(),
-          /* preDexDeps */ ImmutableSet.<IntermediateDexRule>of());
+          /* preDexDeps */ ImmutableSet.<IntermediateDexRule>of(),
+          /* rDotJavaNeedsDexing */ false);
 
       return new AndroidInstrumentationApk(result.getParams(),
           manifest,
           apkUnderTest,
           buildRulesToExcludeFromDex,
-          result.getUberRDotJavaBuildable(),
+          result.getUberRDotJava(),
           result.getAaptPackageResources(),
           androidResourceDepsFinder,
           getBuildTargetsAsBuildRules(ruleResolver, classpathDeps.build()),
@@ -255,14 +243,14 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
     }
   }
 
-  private static AndroidBinaryRule getUnderlyingApk(InstallableBuildRule rule) {
-    if (rule instanceof AndroidBinaryRule) {
-      return (AndroidBinaryRule)rule;
-    } else if (rule instanceof ApkGenrule) {
-      return getUnderlyingApk(((ApkGenrule)rule).getInstallableBuildRule());
+  private static AndroidBinaryRule getUnderlyingApk(InstallableApk installable) {
+    if (installable instanceof AndroidBinaryRule) {
+      return (AndroidBinaryRule)installable;
+    } else if (installable instanceof ApkGenrule) {
+      return getUnderlyingApk(((ApkGenrule)installable).getInstallableApk());
     } else {
       throw new IllegalStateException(
-          rule.getFullyQualifiedName() +
+          installable.getBuildTarget().getFullyQualifiedName() +
           " must be backed by either an android_binary() or an apk_genrule()");
     }
   }

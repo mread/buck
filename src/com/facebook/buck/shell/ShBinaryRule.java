@@ -38,11 +38,11 @@ import com.facebook.buck.util.ProjectFilesystem;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -76,15 +76,17 @@ public class ShBinaryRule extends DoNotUseAbstractBuildable
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
-    return Iterables.concat(ImmutableList.of(main.toString()),
-        SourcePaths.filterInputsToCompareToOutput(resources));
+  public Collection<Path> getInputsToCompareToOutput() {
+    return ImmutableList.<Path>builder()
+        .add(main)
+        .addAll(SourcePaths.filterInputsToCompareToOutput(resources))
+        .build();
   }
 
   @Override
   public List<Step> getBuildSteps(BuildContext context, BuildableContext buildableContext)
       throws IOException {
-    MakeCleanDirectoryStep mkdir = new MakeCleanDirectoryStep(output.getParent().toString());
+    MakeCleanDirectoryStep mkdir = new MakeCleanDirectoryStep(output.getParent());
 
     // Generate an .sh file that builds up an environment and invokes the user's script.
     // This generated .sh file will be returned by getExecutableCommand().
@@ -103,8 +105,8 @@ public class ShBinaryRule extends DoNotUseAbstractBuildable
   }
 
   @Override
-  public String getPathToOutputFile() {
-    return output.toString();
+  public Path getPathToOutputFile() {
+    return output;
   }
 
   @Override

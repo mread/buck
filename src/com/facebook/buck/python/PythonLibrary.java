@@ -35,11 +35,11 @@ import com.facebook.buck.util.BuckConstant;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.Iterables;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -64,14 +64,13 @@ public class PythonLibrary extends AbstractBuildable {
 
   @Nullable
   @Override
-  public String getPathToOutputFile() {
+  public Path getPathToOutputFile() {
     return null;
   }
 
   @Override
   public RuleKey.Builder appendDetailsToRuleKey(RuleKey.Builder builder) throws IOException {
-    return builder
-        .set("srcs", ImmutableSortedSet.copyOf(Iterables.transform(srcs, SourcePath.TO_REFERENCE)));
+    return builder;
   }
 
   private Path getPathToPythonPathDirectory() {
@@ -86,7 +85,7 @@ public class PythonLibrary extends AbstractBuildable {
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     return SourcePaths.filterInputsToCompareToOutput(srcs);
   }
 
@@ -117,9 +116,7 @@ public class PythonLibrary extends AbstractBuildable {
 
       directories.add(targetPath.getParent());
       symlinkSteps.add(
-          new SymlinkFileStep(srcPath.toString(),
-              targetPath.toString(),
-              /* useAbsolutePaths */ false));
+          new SymlinkFileStep(srcPath, targetPath, /* useAbsolutePaths */ false));
 
       buildableContext.recordArtifact(targetPath);
     }

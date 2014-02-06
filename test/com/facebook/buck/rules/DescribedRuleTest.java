@@ -32,7 +32,7 @@ import com.facebook.buck.parser.NoSuchBuildTargetException;
 import com.facebook.buck.shell.EchoStep;
 import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.step.Step;
-import com.facebook.buck.testutil.IdentityPathRelativizer;
+import com.facebook.buck.testutil.IdentityPathAbsolutifier;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
@@ -47,6 +47,8 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -61,7 +63,7 @@ public class DescribedRuleTest {
         BuildTargetFactory.newInstance("//one:example"),
         ImmutableSortedSet.<BuildRule>of(),
         ImmutableSet.<BuildTargetPattern>of(),
-        IdentityPathRelativizer.getIdentityRelativizer(),
+        IdentityPathAbsolutifier.getIdentityAbsolutifier(),
         new FakeRuleKeyBuilderFactory()
     );
 
@@ -272,7 +274,7 @@ public class DescribedRuleTest {
     }
 
     @Override
-    public Iterable<String> getInputsToCompareToOutput() {
+    public Collection<Path> getInputsToCompareToOutput() {
       return ImmutableSet.of();
     }
 
@@ -288,7 +290,7 @@ public class DescribedRuleTest {
 
     @Nullable
     @Override
-    public String getPathToOutputFile() {
+    public Path getPathToOutputFile() {
       return null;
     }
   }

@@ -64,9 +64,9 @@ public class NdkLibraryTest {
         NdkLibrary.newNdkLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance(
             String.format("//%s:base", basePath)))
-        .addSrc(basePath + "/Application.mk")
-        .addSrc(basePath + "/main.cpp")
-        .addSrc(basePath + "/Android.mk")
+        .addSrc(Paths.get(basePath + "/Application.mk"))
+        .addSrc(Paths.get(basePath + "/main.cpp"))
+        .addSrc(Paths.get(basePath + "/Android.mk"))
         .addFlag("flag1")
         .addFlag("flag2")
         .setIsAsset(true)
@@ -78,27 +78,27 @@ public class NdkLibraryTest {
 
     assertTrue(ndkLibrary.getProperties().is(ANDROID));
     assertTrue(ndkLibrary.isAsset());
-    assertEquals(BuckConstant.GEN_DIR + "/" + basePath + "/__libbase", ndkLibrary.getLibraryPath());
+    assertEquals(Paths.get(BuckConstant.GEN_DIR, basePath, "__libbase"), ndkLibrary.getLibraryPath());
 
     MoreAsserts.assertListEquals(
         ImmutableList.of(
-            basePath + "/Android.mk",
-            basePath + "/Application.mk",
-            basePath + "/main.cpp"),
+            Paths.get(basePath + "/Android.mk"),
+            Paths.get(basePath + "/Application.mk"),
+            Paths.get(basePath + "/main.cpp")),
         ImmutableList.copyOf(ndkLibrary.getInputsToCompareToOutput()));
 
     List<Step> steps = ndkLibrary.getBuildSteps(context, new FakeBuildableContext());
 
     ExecutionContext executionContext = createMock(ExecutionContext.class);
     ProjectFilesystem projectFilesystem = createMock(ProjectFilesystem.class);
-    Function<String, Path> pathTransform = new Function<String, Path>() {
+    Function<Path, Path> pathTransform = new Function<Path, Path>() {
       @Override
-      public Path apply(String pathRelativeTo) {
-        return Paths.get("/foo/", pathRelativeTo);
+      public Path apply(Path pathRelativeTo) {
+        return Paths.get("/foo/", pathRelativeTo.toString());
       }
     };
     expect(executionContext.getProjectFilesystem()).andReturn(projectFilesystem);
-    expect(projectFilesystem.getPathRelativizer()).andReturn(pathTransform);
+    expect(projectFilesystem.getAbsolutifier()).andReturn(pathTransform);
     Path binDir = Paths.get(BuckConstant.BIN_DIR, "java/src/com/facebook/base/__libbase/libs");
     expect(projectFilesystem.resolve(binDir)).andReturn(Paths.get("/foo/" + binDir));
     File ndkDir = createMock(File.class);

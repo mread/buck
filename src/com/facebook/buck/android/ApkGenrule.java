@@ -25,7 +25,7 @@ import com.facebook.buck.rules.BuildRuleParams;
 import com.facebook.buck.rules.BuildRuleResolver;
 import com.facebook.buck.rules.BuildRuleType;
 import com.facebook.buck.rules.BuildableProperties;
-import com.facebook.buck.rules.InstallableBuildRule;
+import com.facebook.buck.rules.InstallableApk;
 import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.rules.SourcePath;
 import com.facebook.buck.shell.Genrule;
@@ -35,10 +35,10 @@ import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSortedSet;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -57,19 +57,19 @@ import java.util.List;
  * )
  * </pre>
  */
-public class ApkGenrule extends Genrule implements InstallableBuildRule {
+public class ApkGenrule extends Genrule implements InstallableApk {
 
   private static final BuildableProperties PROPERTIES = new BuildableProperties(ANDROID);
-  private final InstallableBuildRule apk;
-  private final Function<String, Path> relativeToAbsolutePathFunction;
+  private final InstallableApk apk;
+  private final Function<Path, Path> relativeToAbsolutePathFunction;
 
   private ApkGenrule(BuildRuleParams buildRuleParams,
-      List<String> srcs,
+      List<Path> srcs,
       Optional<String> cmd,
       Optional<String> bash,
       Optional<String> cmdExe,
-      Function<String, Path> relativeToAbsolutePathFunction,
-      InstallableBuildRule apk) {
+      Function<Path, Path> relativeToAbsolutePathFunction,
+      InstallableApk apk) {
     super(buildRuleParams,
         srcs,
         cmd,
@@ -96,10 +96,10 @@ public class ApkGenrule extends Genrule implements InstallableBuildRule {
   @Override
   public RuleKey.Builder appendToRuleKey(RuleKey.Builder builder) throws IOException {
     return super.appendToRuleKey(builder)
-        .set("apk", apk);
+        .setInput("apk", apk.getApkPath());
   }
 
-  public InstallableBuildRule getInstallableBuildRule() {
+  public InstallableApk getInstallableApk() {
     return apk;
   }
 
@@ -109,12 +109,12 @@ public class ApkGenrule extends Genrule implements InstallableBuildRule {
   }
 
   @Override
-  public String getApkPath() {
+  public Path getApkPath() {
     return getPathToOutputFile();
   }
 
   @Override
-  public ImmutableSortedSet<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     return super.getInputsToCompareToOutput();
   }
 
@@ -151,7 +151,7 @@ public class ApkGenrule extends Genrule implements InstallableBuildRule {
           "so apk should not be null at this point and should have an entry in buildRuleIndex " +
           "as all deps should.");
 
-      if (!(apkRule instanceof InstallableBuildRule)) {
+      if (!(apkRule.getBuildable() instanceof InstallableApk)) {
         throw new HumanReadableException("The 'apk' argument of %s, %s, must correspond to an " +
         		"installable rule, such as android_binary() or apk_genrule().",
         		getBuildTarget(),
@@ -165,7 +165,7 @@ public class ApkGenrule extends Genrule implements InstallableBuildRule {
           bash,
           cmdExe,
           getRelativeToAbsolutePathFunction(buildRuleParams),
-          (InstallableBuildRule)apkRule);
+          (InstallableApk)apkRule.getBuildable());
     }
 
     public Builder setApk(BuildTarget apk) {

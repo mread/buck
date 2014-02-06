@@ -16,7 +16,7 @@
 
 package com.facebook.buck.rules;
 
-import com.facebook.buck.testutil.IdentityPathRelativizer;
+import com.facebook.buck.testutil.IdentityPathAbsolutifier;
 import com.google.common.base.Function;
 
 import java.nio.file.Path;
@@ -34,8 +34,8 @@ public class FakeAbstractBuildRuleBuilderParams implements AbstractBuildRuleBuil
   }
 
   @Override
-  public Function<String, Path> getPathRelativizer() {
-    return IdentityPathRelativizer.getIdentityRelativizer();
+  public Function<Path, Path> getPathAbsolutifier() {
+    return IdentityPathAbsolutifier.getIdentityAbsolutifier();
   }
 
   @Override

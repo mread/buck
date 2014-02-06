@@ -16,16 +16,17 @@
 
 package com.facebook.buck.shell;
 
+import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.rules.AbstractBuildRuleBuilder;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
 import com.facebook.buck.rules.BuildContext;
+import com.facebook.buck.rules.BuildRule;
 import com.facebook.buck.rules.BuildRuleParams;
 import com.facebook.buck.rules.BuildRuleResolver;
 import com.facebook.buck.rules.BuildRuleType;
 import com.facebook.buck.rules.BuildableContext;
 import com.facebook.buck.rules.DoNotUseAbstractBuildable;
 import com.facebook.buck.rules.LabelsAttributeBuilder;
-import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.rules.TestRule;
 import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.step.Step;
@@ -37,14 +38,15 @@ import com.facebook.buck.util.BuckConstant;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -55,22 +57,16 @@ import java.util.concurrent.Callable;
  */
 public class ShTestRule extends DoNotUseAbstractBuildable implements TestRule {
 
-  private final String test;
+  private final Path test;
   private final ImmutableSet<String> labels;
 
   protected ShTestRule(
       BuildRuleParams buildRuleParams,
-      String test,
+      Path test,
       Set<String> labels) {
     super(buildRuleParams);
     this.test = Preconditions.checkNotNull(test);
     this.labels = ImmutableSet.copyOf(labels);
-  }
-
-  @Override
-  public RuleKey.Builder appendToRuleKey(RuleKey.Builder builder) throws IOException {
-    return super.appendToRuleKey(builder)
-        .set("test", test);
   }
 
   @Override
@@ -79,7 +75,7 @@ public class ShTestRule extends DoNotUseAbstractBuildable implements TestRule {
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
+  public Collection<Path> getInputsToCompareToOutput() {
     return ImmutableSet.of(test);
   }
 
@@ -90,7 +86,12 @@ public class ShTestRule extends DoNotUseAbstractBuildable implements TestRule {
 
   @Override
   public ImmutableSet<String> getContacts() {
-    return ImmutableSet.<String>of();
+    return ImmutableSet.of();
+  }
+
+  @Override
+  public ImmutableSet<BuildRule> getSourceUnderTest() {
+    return ImmutableSet.of();
   }
 
   @Override
@@ -107,7 +108,10 @@ public class ShTestRule extends DoNotUseAbstractBuildable implements TestRule {
   }
 
   @Override
-  public List<Step> runTests(BuildContext buildContext, ExecutionContext executionContext) {
+  public List<Step> runTests(
+      BuildContext buildContext,
+      ExecutionContext executionContext,
+      Optional<TestSelectorList> testSelectorList) {
     Preconditions.checkState(isRuleBuilt(), "%s must be built before tests can be run.", this);
 
     Step mkdirClean = new MakeCleanDirectoryStep(getPathToTestOutputDirectory());
@@ -133,7 +137,9 @@ public class ShTestRule extends DoNotUseAbstractBuildable implements TestRule {
   }
 
   @Override
-  public Callable<TestResults> interpretTestResults(ExecutionContext context) {
+  public Callable<TestResults> interpretTestResults(
+      ExecutionContext context,
+      boolean isUsingTestSelectors) {
     final ImmutableSet<String> contacts = getContacts();
     return new Callable<TestResults>() {
 
@@ -158,7 +164,7 @@ public class ShTestRule extends DoNotUseAbstractBuildable implements TestRule {
   public static class Builder extends AbstractBuildRuleBuilder<ShTestRule> implements
       LabelsAttributeBuilder {
 
-    private String test;
+    private Path test;
     private ImmutableSet<String> labels = ImmutableSet.of();
 
     private Builder(AbstractBuildRuleBuilderParams params) {
@@ -171,7 +177,7 @@ public class ShTestRule extends DoNotUseAbstractBuildable implements TestRule {
       return new ShTestRule(buildRuleParams, test, labels);
     }
 
-    public Builder setTest(String test) {
+    public Builder setTest(Path test) {
       this.test = test;
       return this;
     }

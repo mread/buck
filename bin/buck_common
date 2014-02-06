@@ -1,5 +1,14 @@
 
 
+function gitFetchFailed()
+{
+  echo >&2
+  echo >&2 "Failed to fetch Buck updates from git."
+  echo >&2 "You can disable this by creating a '.nobuckcheck' file in your repository,"
+  echo >&2 "but this might lead to strange bugs or build failures."
+  exit 1
+}
+
 function checkForAnt()
 {
   if [ -z `command -v ant` ]; then
@@ -37,6 +46,14 @@ ORIGINAL_WORKING_DIRECTORY="$PWD"
 # Keep track of the project root directory.
 PROJECT_ROOT="$PWD"
 
+if ! [ -f "$PROJECT_ROOT/.buckconfig" ] ; then
+  echo >&2 'This does not appear to be the root of a Buck project.'
+  echo >&2 'Please "cd" to the root of your project before running buck.'
+  echo >&2 'If this really is the root of your project, run "touch .buckconfig"'
+  echo >&2 'then re-run your buck command.'
+  exit 1
+fi
+
 # Test for running buck daemon.
 BUCKD_DIR="${PROJECT_ROOT}/.buckd"
 BUCKD_LOG_FILE="${BUCKD_DIR}/buckd.log"
@@ -49,6 +66,7 @@ kill -0 `cat "$BUCKD_PID_FILE" 2> /dev/null` &> /dev/null || BUCKD_RUNNING=1
 pushd "$BUCK_BIN_DIRECTORY" > /dev/null
 pushd .. > /dev/null
 BUCK_DIRECTORY="$PWD"
+BUCK_SUCCESS_FILE="build/successful-build"
 
 # If there is a .buckversion file in the project root, then make sure that Buck is at that version.
 # The only way to override this is to include a .nobuckcheck file in the project root.
@@ -65,9 +83,9 @@ elif [ -e "${PROJECT_ROOT}/.buckversion" ]; then
   # If the hash is in not in the user's repository, do a `git fetch`.
   if ! git cat-file -e "$BUCK_REQUIRED_VERSION"; then
     if [ -e "${BUCK_REQUIRED_BRANCH}" ]; then
-      git fetch --all
+      git fetch --all || gitFetchFailed
     else
-      git fetch origin $BUCK_REQUIRED_BRANCH
+      git fetch origin $BUCK_REQUIRED_BRANCH || gitFetchFailed
     fi
   fi
 
@@ -96,6 +114,7 @@ elif [ -e "${PROJECT_ROOT}/.buckversion" ]; then
     git checkout $BUCK_REQUIRED_VERSION
 
     # Now that we have updated the repository, we should rebuild Buck.
+    rm -f "$BUCK_SUCCESS_FILE"
     checkForAnt
     ant clean
     if [ $? -ne 0 ]; then
@@ -195,16 +214,14 @@ else
 fi
 
 # Make sure that Buck has been built.
-if [ ! -e "build/buck.jar" ]; then
+if [ ! -e "$BUCK_SUCCESS_FILE" ]; then
 
   if [ $BUCKD_RUNNING -eq 0 ] && [ -e "$BUCKD_PID_FILE" ]; then
     echo "Killing buckd before building buck"
     kill `cat "$BUCKD_PID_FILE"` || true
   fi
 
-  echo "No sign of buck.jar -- building Buck!"
-  # Note the jar file will not be used,
-  # but serves to represent whether everything has been built.
+  echo "Buck does not appear to have been built -- building Buck!"
   checkForAnt
   (
     set -e
@@ -267,6 +284,7 @@ ${BUCK_DIRECTORY}/third-party/java/astyanax/slf4j-api-1.7.2.jar:\
 ${BUCK_DIRECTORY}/third-party/java/astyanax/slf4j-log4j12-1.7.2.jar:\
 ${BUCK_DIRECTORY}/third-party/java/closure-templates/soy-2012-12-21-no-guava.jar:\
 ${BUCK_DIRECTORY}/third-party/java/gson/gson-2.2.4.jar:\
+${BUCK_DIRECTORY}/third-party/java/dd-plist/dd-plist.jar:\
 ${BUCK_DIRECTORY}/third-party/java/jetty/jetty-all-9.0.4.v20130625.jar:\
 ${BUCK_DIRECTORY}/third-party/java/jetty/servlet-api.jar:\
 ${BUCK_DIRECTORY}/third-party/java/xz-java-1.3/xz-1.3.jar:\

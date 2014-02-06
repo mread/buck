@@ -34,11 +34,11 @@ import com.facebook.buck.util.BuckConstant;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.Iterables;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -75,13 +75,13 @@ public class AndroidManifest extends AbstractBuildable {
   private final SourcePath skeletonFile;
 
   /** These must be sorted so {@link #getInputsToCompareToOutput} returns a consistent value. */
-  private final ImmutableSortedSet<String> manifestFiles;
+  private final ImmutableSortedSet<Path> manifestFiles;
 
   private final Path pathToOutputFile;
 
   protected AndroidManifest(BuildTarget buildTarget,
       SourcePath skeletonFile,
-      Set<String> manifestFiles) {
+      Set<Path> manifestFiles) {
     this.buildTarget = Preconditions.checkNotNull(buildTarget);
     this.skeletonFile = Preconditions.checkNotNull(skeletonFile);
     this.manifestFiles = ImmutableSortedSet.copyOf(manifestFiles);
@@ -92,17 +92,16 @@ public class AndroidManifest extends AbstractBuildable {
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
-    Iterable<String> sourcePaths = SourcePaths.filterInputsToCompareToOutput(Collections.singleton(
-        skeletonFile));
-    return Iterables.concat(sourcePaths, manifestFiles);
+  public Collection<Path> getInputsToCompareToOutput() {
+    return ImmutableList.<Path>builder()
+        .addAll(SourcePaths.filterInputsToCompareToOutput(Collections.singleton(skeletonFile)))
+        .addAll(manifestFiles)
+        .build();
   }
 
   @Override
-  public RuleKey.Builder appendDetailsToRuleKey(RuleKey.Builder builder) {
-    return builder
-        .set("skeleton", skeletonFile.asReference())
-        .set("manifestFiles", manifestFiles);
+  public RuleKey.Builder appendDetailsToRuleKey(RuleKey.Builder builder) throws IOException {
+    return builder;
   }
 
   public BuildTarget getBuildTarget() {
@@ -127,7 +126,7 @@ public class AndroidManifest extends AbstractBuildable {
     commands.add(new MkdirStep(pathToOutputFile.getParent()));
 
     commands.add(new GenerateManifestStep(
-        skeletonFile.resolve(context).toString(),
+        skeletonFile.resolve(context),
         manifestFiles,
         getPathToOutputFile()));
 
@@ -135,8 +134,8 @@ public class AndroidManifest extends AbstractBuildable {
   }
 
   @Override
-  public String getPathToOutputFile() {
-    return pathToOutputFile.toString();
+  public Path getPathToOutputFile() {
+    return pathToOutputFile;
   }
 
 

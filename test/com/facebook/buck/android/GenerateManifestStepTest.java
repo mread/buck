@@ -30,11 +30,13 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class GenerateManifestStepTest {
 
-  private String skeletonPath;
-  private String manifestPath;
+  private Path skeletonPath;
+  private Path manifestPath;
 
   @Before
   public void setUp() {
@@ -44,16 +46,16 @@ public class GenerateManifestStepTest {
 
   @After
   public void tearDown() {
-    new File(manifestPath).delete();
+    manifestPath.toFile().delete();
   }
 
   @Test
   public void testManifestGeneration() throws IOException {
-    String expectedOutputPath = testDataPath("AndroidManifest.expected.xml");
-    String libraryManifestA = testDataPath("AndroidManifestA.xml");
-    String libraryManifestB = testDataPath("AndroidManifestB.xml");
-    String libraryManifestC = testDataPath("AndroidManifestC.xml");
-    ImmutableSet.Builder<String> libraryManifestFiles = ImmutableSet.builder();
+    String expectedOutputPath = testDataPath("AndroidManifest.expected.xml").toString();
+    Path libraryManifestA = testDataPath("AndroidManifestA.xml");
+    Path libraryManifestB = testDataPath("AndroidManifestB.xml");
+    Path libraryManifestC = testDataPath("AndroidManifestC.xml");
+    ImmutableSet.Builder<Path> libraryManifestFiles = ImmutableSet.builder();
     libraryManifestFiles.add(libraryManifestA);
     libraryManifestFiles.add(libraryManifestB);
     libraryManifestFiles.add(libraryManifestC);
@@ -64,15 +66,17 @@ public class GenerateManifestStepTest {
         skeletonPath,
         libraryManifestFiles.build(),
         manifestPath);
-    manifestCommand.execute(context);
+    int result = manifestCommand.execute(context);
+
+    assertEquals(0, result);
 
     String expected = Files.toString(new File(expectedOutputPath), Charsets.UTF_8);
-    String output = Files.toString(new File(manifestPath), Charsets.UTF_8);
+    String output = Files.toString(manifestPath.toFile(), Charsets.UTF_8);
 
     assertEquals(expected, output);
   }
 
-  private String testDataPath(String fileName) {
-    return "testdata/com/facebook/buck/shell/" + fileName;
+  private Path testDataPath(String fileName) {
+    return Paths.get("testdata/com/facebook/buck/shell", fileName);
   }
 }

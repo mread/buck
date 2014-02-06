@@ -19,6 +19,7 @@ package com.facebook.buck.android;
 import com.facebook.buck.shell.BashStep;
 import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.step.Step;
+import com.facebook.buck.util.Console;
 import com.facebook.buck.util.DefaultFilteredDirectoryCopier;
 import com.facebook.buck.util.DirectoryTraversal;
 import com.facebook.buck.util.Escaper;
@@ -28,6 +29,7 @@ import com.facebook.buck.util.Filters.Density;
 import com.facebook.buck.util.HumanReadableException;
 import com.facebook.buck.util.MorePaths;
 import com.facebook.buck.util.ProjectFilesystem;
+import com.facebook.buck.util.Verbosity;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
@@ -65,7 +67,7 @@ public class FilterResourcesStep implements Step {
   static final Pattern NON_ENGLISH_STRING_PATH = Pattern.compile(
       "(\\b|.*/)res/values-.+/strings.xml", Pattern.CASE_INSENSITIVE);
 
-  private final ImmutableBiMap<String, String> inResDirToOutResDirMap;
+  private final ImmutableBiMap<Path, Path> inResDirToOutResDirMap;
   private final boolean filterDrawables;
   private final boolean filterStrings;
   private final ImmutableSet<Path> whitelistedStringDirs;
@@ -96,7 +98,7 @@ public class FilterResourcesStep implements Step {
    */
   @VisibleForTesting
   FilterResourcesStep(
-      ImmutableBiMap<String, String> inResDirToOutResDirMap,
+      ImmutableBiMap<Path, Path> inResDirToOutResDirMap,
       boolean filterDrawables,
       boolean filterStrings,
       ImmutableSet<Path> whitelistedStringDirs,
@@ -137,7 +139,7 @@ public class FilterResourcesStep implements Step {
     return nonEnglishStringFilesBuilder.build();
   }
 
-  public ImmutableSet<String> getOutputResourceDirs() {
+  public ImmutableSet<Path> getOutputResourceDirs() {
     return inResDirToOutResDirMap.values();
   }
 
@@ -147,7 +149,7 @@ public class FilterResourcesStep implements Step {
     final boolean canDownscale = imageScaler != null && imageScaler.isAvailable(context);
 
     if (filterDrawables) {
-      Set<String> drawables = drawableFinder.findDrawables(inResDirToOutResDirMap.keySet());
+      Set<Path> drawables = drawableFinder.findDrawables(inResDirToOutResDirMap.keySet());
       filePredicates.add(
           Filters.createImageDensityFilter(drawables, targetDensities, canDownscale));
     }
@@ -209,10 +211,10 @@ public class FilterResourcesStep implements Step {
     Filters.Density targetDensity = Filters.Density.ORDERING.max(targetDensities);
 
     // Go over all the images that remain after filtering.
-    for (String drawable : drawableFinder.findDrawables(inResDirToOutResDirMap.values())) {
+    for (Path drawable : drawableFinder.findDrawables(inResDirToOutResDirMap.values())) {
       File drawableFile = filesystem.getFileForRelativePath(drawable);
 
-      if (drawable.endsWith(".9.png")) {
+      if (drawable.toString().endsWith(".9.png")) {
         // Skip nine-patch for now.
         continue;
       }
@@ -226,9 +228,9 @@ public class FilterResourcesStep implements Step {
         // Replace density qualifier with target density using regular expression to match
         // the qualifier in the context of a path to a drawable.
         String fromDensity = (density == Density.NO_QUALIFIER ? "" : "-") + density.toString();
-        String destination = drawable.replaceFirst(
+        Path destination = Paths.get(drawable.toString().replaceFirst(
             "((?:^|/)drawable[^/]*)" + Pattern.quote(fromDensity) + "(-|$|/)",
-            "$1-" + targetDensity + "$2");
+            "$1-" + targetDensity + "$2"));
 
         double factor = targetDensity.value() / density.value();
         if (factor >= 1.0) {
@@ -246,7 +248,7 @@ public class FilterResourcesStep implements Step {
         }
 
         // Delete newly-empty directories to prevent missing resources errors in apkbuilder.
-        String parent = drawableFile.getParent();
+        Path parent = drawableFile.toPath().getParent();
         if (filesystem.listFiles(parent).length == 0 && !filesystem.deleteFileAtPath(parent)) {
           throw new HumanReadableException("Cannot delete directory: " + parent);
         }
@@ -256,7 +258,7 @@ public class FilterResourcesStep implements Step {
   }
 
   public interface DrawableFinder {
-    public Set<String> findDrawables(Iterable<String> dirs) throws IOException;
+    public Set<Path> findDrawables(Iterable<Path> dirs) throws IOException;
   }
 
   public static class DefaultDrawableFinder implements DrawableFinder {
@@ -268,16 +270,16 @@ public class FilterResourcesStep implements Step {
     }
 
     @Override
-    public Set<String> findDrawables(Iterable<String> dirs) throws IOException {
-      final ImmutableSet.Builder<String> drawableBuilder = ImmutableSet.builder();
-      for (String dir : dirs) {
-        new DirectoryTraversal(new File(dir)) {
+    public Set<Path> findDrawables(Iterable<Path> dirs) throws IOException {
+      final ImmutableSet.Builder<Path> drawableBuilder = ImmutableSet.builder();
+      for (Path dir : dirs) {
+        new DirectoryTraversal(dir.toFile()) {
           @Override
           public void visit(File file, String relativePath) {
             if (DRAWABLE_PATH_PATTERN.matcher(relativePath).matches() &&
                 !DRAWABLE_EXCLUDE_PATTERN.matcher(relativePath).matches()) {
               // The path is normalized so that the value can be matched against patterns.
-              drawableBuilder.add(MorePaths.newPathInstance(file).toString());
+              drawableBuilder.add(MorePaths.newPathInstance(file));
             }
           }
         }.traverse();
@@ -288,7 +290,7 @@ public class FilterResourcesStep implements Step {
 
   public interface ImageScaler {
     public boolean isAvailable(ExecutionContext context);
-    public void scale(double factor, String source, String destination, ExecutionContext context);
+    public void scale(double factor, Path source, Path destination, ExecutionContext context);
   }
 
   /**
@@ -304,13 +306,27 @@ public class FilterResourcesStep implements Step {
       return instance;
     }
 
-    @Override
-    public boolean isAvailable(ExecutionContext context) {
-      return 0 == new BashStep("which convert").execute(context);
+    private ExecutionContext getContextWithSilentConsole(ExecutionContext context) {
+      // Using the normal console results in the super console freezing.
+      Console console = context.getConsole();
+      return ExecutionContext.builder()
+          .setExecutionContext(context)
+          .setConsole(new Console(
+              Verbosity.SILENT,
+              console.getStdOut(),
+              console.getStdErr(),
+              console.getAnsi()
+          ))
+          .build();
     }
 
     @Override
-    public void scale(double factor, String source, String destination, ExecutionContext context) {
+    public boolean isAvailable(ExecutionContext context) {
+      return 0 == new BashStep("which convert").execute(getContextWithSilentConsole(context));
+    }
+
+    @Override
+    public void scale(double factor, Path source, Path destination, ExecutionContext context) {
       Step convertStep = new BashStep(
           "convert",
           "-adaptive-resize", (int) (factor * 100) + "%",
@@ -318,7 +334,7 @@ public class FilterResourcesStep implements Step {
           Escaper.escapeAsBashString(destination)
       );
 
-      if (0 != convertStep.execute(context)) {
+      if (0 != convertStep.execute(getContextWithSilentConsole(context))) {
         throw new HumanReadableException("Cannot scale " + source + " to " + destination);
       }
     }
@@ -375,7 +391,7 @@ public class FilterResourcesStep implements Step {
 
   public static class Builder {
 
-    private ImmutableBiMap<String, String> inResDirToOutResDirMap;
+    private ImmutableBiMap<Path, Path> inResDirToOutResDirMap;
     private ResourceFilter resourceFilter;
     private boolean filterStrings = false;
     private ImmutableSet<Path> whitelistedStringDirs = ImmutableSet.of();
@@ -383,7 +399,7 @@ public class FilterResourcesStep implements Step {
     private Builder() {
     }
 
-    public Builder setInResToOutResDirMap(ImmutableBiMap<String, String> inResDirToOutResDirMap) {
+    public Builder setInResToOutResDirMap(ImmutableBiMap<Path, Path> inResDirToOutResDirMap) {
       this.inResDirToOutResDirMap = inResDirToOutResDirMap;
       return this;
     }

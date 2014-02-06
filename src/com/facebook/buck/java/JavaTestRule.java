@@ -20,6 +20,7 @@ import static com.facebook.buck.rules.BuildableProperties.Kind.ANDROID;
 
 import com.facebook.buck.android.DummyRDotJava;
 import com.facebook.buck.android.JavaLibraryGraphEnhancer;
+import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
 import com.facebook.buck.rules.BuildContext;
@@ -71,7 +72,7 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
   /**
    * Build rules for which this test rule will be testing.
    */
-  private final ImmutableSet<JavaLibraryRule> sourceUnderTest;
+  private final ImmutableSet<BuildRule> sourceUnderTest;
 
   private CompiledClassFileFinder compiledClassFileFinder;
 
@@ -80,15 +81,15 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
   private final ImmutableSet<String> contacts;
 
   protected JavaTestRule(BuildRuleParams buildRuleParams,
-      Set<String> srcs,
+      Set<Path> srcs,
       Set<SourcePath> resources,
       Optional<DummyRDotJava> optionalDummyRDotJava,
       Set<String> labels,
       Set<String> contacts,
-      Optional<String> proguardConfig,
+      Optional<Path> proguardConfig,
       JavacOptions javacOptions,
       List<String> vmArgs,
-      ImmutableSet<JavaLibraryRule> sourceUnderTest) {
+      ImmutableSet<BuildRule> sourceUnderTest) {
     super(buildRuleParams,
         srcs,
         resources,
@@ -130,7 +131,7 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
   /**
    * @return A set of rules that this test rule will be testing.
    */
-  public ImmutableSet<JavaLibraryRule> getSourceUnderTest() {
+  public ImmutableSet<BuildRule> getSourceUnderTest() {
     return sourceUnderTest;
   }
 
@@ -143,7 +144,10 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
    * other {@code java_test()} rules, then they will be run separately.
    */
   @Override
-  public List<Step> runTests(BuildContext buildContext, ExecutionContext executionContext) {
+  public List<Step> runTests(
+      BuildContext buildContext,
+      ExecutionContext executionContext,
+      Optional<TestSelectorList> testSelectorList) {
     Preconditions.checkState(isRuleBuilt(), "%s must be built before tests can be run.", this);
 
     // If no classes were generated, then this is probably a java_test() that declares a number of
@@ -166,9 +170,9 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
     if (getProperties().is(ANDROID)) {
       Preconditions.checkState(optionalDummyRDotJava.isPresent(),
           "DummyRDotJava must have been created by the BuildRuleBuilder!");
-      String rDotJavaClasspathEntry = optionalDummyRDotJava.get().getRDotJavaBinFolder();
+      Path rDotJavaClasspathEntry = optionalDummyRDotJava.get().getRDotJavaBinFolder();
       ImmutableSet.Builder<String> classpathEntriesBuilder = ImmutableSet.builder();
-      classpathEntriesBuilder.add(rDotJavaClasspathEntry);
+      classpathEntriesBuilder.add(rDotJavaClasspathEntry.toString());
       classpathEntriesBuilder.addAll(getTransitiveClasspathEntries().values());
       classpathEntries = classpathEntriesBuilder.build();
     } else {
@@ -182,7 +186,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
         pathToTestOutput.toString(),
         executionContext.isCodeCoverageEnabled(),
         executionContext.isJacocoEnabled(),
-        executionContext.isDebugEnabled());
+        executionContext.isDebugEnabled(),
+        testSelectorList);
     steps.add(junit);
 
     return steps.build();
@@ -231,6 +236,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
     File outputDirectory = executionContext.getProjectFilesystem().getFileForRelativePath(
         getPathToTestOutputDirectory());
     for (String testClass : testClassNames) {
+      // We never use cached results when using test selectors, so there's no need to incorporate
+      // the .test_selectors suffix here if we are using selectors.
       File testResultFile = new File(outputDirectory, testClass + ".xml");
       if (!testResultFile.isFile()) {
         return false;
@@ -250,7 +257,9 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
   }
 
   @Override
-  public Callable<TestResults> interpretTestResults(final ExecutionContext context) {
+  public Callable<TestResults> interpretTestResults(
+      final ExecutionContext context,
+      final boolean isUsingTestSelectors) {
     final ImmutableSet<String> contacts = getContacts();
     return new Callable<TestResults>() {
 
@@ -266,10 +275,19 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
         List<TestCaseSummary> summaries = Lists.newArrayListWithCapacity(testClassNames.size());
         ProjectFilesystem filesystem = context.getProjectFilesystem();
         for (String testClass : testClassNames) {
+          String testSelectorSuffix = isUsingTestSelectors ? ".test_selectors" : "";
+          String path = String.format("%s%s.xml", testClass, testSelectorSuffix);
           File testResultFile = filesystem.getFileForRelativePath(
-              getPathToTestOutputDirectory().resolve(String.format("%s.xml", testClass)));
-          TestCaseSummary summary = XmlTestResultParser.parse(testResultFile);
-          summaries.add(summary);
+              getPathToTestOutputDirectory().resolve(path));
+          // Not having a test result file at all (which only happens when we are using test
+          // selectors) is interpreted as meaning a test didn't run at all, so we'll completely
+          // ignore it.  This is another result of the fact that JUnit is the only thing that can
+          // definitively say whether or not a class should be run.  It's not possible, for example,
+          // to filter testClassNames here at the buck end.
+          if (!isUsingTestSelectors || testResultFile.isFile()) {
+            TestCaseSummary summary = XmlTestResultParser.parse(testResultFile);
+            summaries.add(summary);
+          }
         }
 
         return new TestResults(getBuildTarget(), summaries, contacts);
@@ -294,9 +312,9 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
       Preconditions.checkState(rule.isRuleBuilt(),
           "Rule must be built so that the classes folder is available");
       Path outputPath;
-      String relativeOutputPath = rule.getPathToOutputFile();
+      Path relativeOutputPath = rule.getPathToOutputFile();
       if (relativeOutputPath != null) {
-        outputPath = context.getProjectFilesystem().getPathRelativizer().apply(relativeOutputPath);
+        outputPath = context.getProjectFilesystem().getAbsolutifier().apply(relativeOutputPath);
       } else {
         outputPath = null;
       }
@@ -325,13 +343,14 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
      * @param jarFile jar where the generated .class files were written
      */
     @VisibleForTesting
-    static Set<String> getClassNamesForSources(Set<String> sources, @Nullable Path jarFile) {
+    static Set<String> getClassNamesForSources(Set<Path> sources, @Nullable Path jarFile) {
       if (jarFile == null) {
         return ImmutableSet.of();
       }
 
       final Set<String> sourceClassNames = Sets.newHashSetWithExpectedSize(sources.size());
-      for (String source : sources) {
+      for (Path path : sources) {
+        String source = path.toString();
         int lastSlashIndex = source.lastIndexOf('/');
         if (lastSlashIndex >= 0) {
           source = source.substring(lastSlashIndex + 1);
@@ -398,7 +417,7 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
 
     @Override
     public JavaTestRule build(BuildRuleResolver ruleResolver) {
-      ImmutableSet<JavaLibraryRule> sourceUnderTest = generateSourceUnderTest(sourcesUnderTest,
+      ImmutableSet<BuildRule> sourceUnderTest = generateSourceUnderTest(sourcesUnderTest,
           ruleResolver);
       AnnotationProcessingParams processingParams = getAnnotationProcessingBuilder().build(ruleResolver);
       javacOptions.setAnnotationProcessingData(processingParams);
@@ -435,7 +454,7 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
     }
 
     @Override
-    public Builder addSrc(String src) {
+    public Builder addSrc(Path src) {
       super.addSrc(src);
       return this;
     }
@@ -464,15 +483,15 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
     /**
      * Generates the set of build rules that contain the source that will be under test.
      */
-    protected ImmutableSet<JavaLibraryRule> generateSourceUnderTest(
+    protected ImmutableSet<BuildRule> generateSourceUnderTest(
         ImmutableSet<BuildTarget> sourceUnderTestNames, BuildRuleResolver ruleResolver) {
-      ImmutableSet.Builder<JavaLibraryRule> sourceUnderTest = ImmutableSet.builder();
+      ImmutableSet.Builder<BuildRule> sourceUnderTest = ImmutableSet.builder();
       for (BuildTarget sourceUnderTestName : sourceUnderTestNames) {
         // Generates the set by matching its path with the full path names that are passed in.
         BuildRule rule = ruleResolver.get(sourceUnderTestName);
 
         if (rule instanceof JavaLibraryRule) {
-          sourceUnderTest.add((JavaLibraryRule) rule);
+          sourceUnderTest.add(rule);
         } else if (rule == null) {
           throw new HumanReadableException(
               "Specified source under test for %s is not among its dependencies: %s",

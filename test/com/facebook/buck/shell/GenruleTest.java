@@ -17,6 +17,7 @@
 package com.facebook.buck.shell;
 
 import static com.facebook.buck.util.BuckConstant.GEN_DIR;
+import static com.facebook.buck.util.BuckConstant.GEN_PATH;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -28,19 +29,19 @@ import com.facebook.buck.java.JavaLibraryRule;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.model.BuildTargetFactory;
 import com.facebook.buck.model.BuildTargetPattern;
-import com.facebook.buck.rules.BuildRuleFactoryParams;
 import com.facebook.buck.parser.BuildTargetParser;
 import com.facebook.buck.parser.NoSuchBuildTargetException;
-import com.facebook.buck.rules.NonCheckingBuildRuleFactoryParams;
 import com.facebook.buck.parser.ParseContext;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
 import com.facebook.buck.rules.BuildContext;
 import com.facebook.buck.rules.BuildRule;
+import com.facebook.buck.rules.BuildRuleFactoryParams;
 import com.facebook.buck.rules.BuildRuleResolver;
 import com.facebook.buck.rules.BuildRuleType;
 import com.facebook.buck.rules.FakeAbstractBuildRuleBuilderParams;
 import com.facebook.buck.rules.FakeBuildRule;
 import com.facebook.buck.rules.FakeBuildableContext;
+import com.facebook.buck.rules.NonCheckingBuildRuleFactoryParams;
 import com.facebook.buck.shell.Genrule.Builder;
 import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.step.Step;
@@ -48,7 +49,6 @@ import com.facebook.buck.step.fs.MakeCleanDirectoryStep;
 import com.facebook.buck.step.fs.MkdirAndSymlinkFileStep;
 import com.facebook.buck.step.fs.MkdirStep;
 import com.facebook.buck.step.fs.RmStep;
-import com.facebook.buck.testutil.IdentityPathRelativizer;
 import com.facebook.buck.testutil.TestConsole;
 import com.facebook.buck.util.AndroidPlatformTarget;
 import com.facebook.buck.util.Ansi;
@@ -82,11 +82,11 @@ public class GenruleTest {
 
   private static final String BASE_PATH = getAbsolutePathFor("/opt/local/fbandroid");
 
-  private static final Function<String, Path> relativeToAbsolutePathFunction =
-      new Function<String, Path>() {
+  private static final Function<Path, Path> ABSOLUTIFIER =
+      new Function<Path, Path>() {
         @Override
-        public Path apply(String path) {
-          return getAbsolutePathInBase(path);
+        public Path apply(Path input) {
+          return getAbsolutePathInBase(input.toString());
         }
       };
 
@@ -95,8 +95,8 @@ public class GenruleTest {
   @Before
   public void newFakeFilesystem() {
     fakeFilesystem = EasyMock.createNiceMock(ProjectFilesystem.class);
-    EasyMock.expect(fakeFilesystem.getPathRelativizer())
-        .andReturn(relativeToAbsolutePathFunction)
+    EasyMock.expect(fakeFilesystem.getAbsolutifier())
+        .andReturn(ABSOLUTIFIER)
         .times(0,  1);
     EasyMock.replay(fakeFilesystem);
   }
@@ -148,20 +148,20 @@ public class GenruleTest {
             buildTarget);
     GenruleBuildRuleFactory factory = new GenruleBuildRuleFactory();
     Builder builder = factory.newInstance(params);
-    builder.setRelativeToAbsolutePathFunctionForTesting(relativeToAbsolutePathFunction);
+    builder.setRelativeToAbsolutePathFunctionForTesting(ABSOLUTIFIER);
     Genrule genrule = ruleResolver.buildAndAddToIndex(builder);
 
     // Verify all of the observers of the Genrule.
     assertEquals(BuildRuleType.GENRULE, genrule.getType());
-    assertEquals(GEN_DIR + "/src/com/facebook/katana/AndroidManifest.xml",
+    assertEquals(GEN_PATH.resolve("src/com/facebook/katana/AndroidManifest.xml"),
         genrule.getPathToOutputFile());
     assertEquals(
         getAbsolutePathInBase(GEN_DIR + "/src/com/facebook/katana/AndroidManifest.xml").toString(),
         genrule.getAbsoluteOutputFilePath());
     BuildContext buildContext = null; // unused since there are no deps
-    ImmutableSortedSet<String> inputsToCompareToOutputs = ImmutableSortedSet.of(
-        "src/com/facebook/katana/convert_to_katana.py",
-        "src/com/facebook/katana/AndroidManifest.xml");
+    ImmutableSortedSet<Path> inputsToCompareToOutputs = ImmutableSortedSet.of(
+        Paths.get("src/com/facebook/katana/convert_to_katana.py"),
+        Paths.get("src/com/facebook/katana/AndroidManifest.xml"));
     assertEquals(inputsToCompareToOutputs,
         genrule.getInputsToCompareToOutput());
 
@@ -208,12 +208,12 @@ public class GenruleTest {
         thirdMkdirCommand.getPath());
 
     MkdirAndSymlinkFileStep linkSource1 = (MkdirAndSymlinkFileStep) steps.get(4);
-    assertEquals("src/com/facebook/katana/convert_to_katana.py", linkSource1.getSource());
-    assertEquals(pathToSrcDir + "/convert_to_katana.py", linkSource1.getTarget());
+    assertEquals(Paths.get("src/com/facebook/katana/convert_to_katana.py"), linkSource1.getSource());
+    assertEquals(Paths.get(pathToSrcDir + "/convert_to_katana.py"), linkSource1.getTarget());
 
     MkdirAndSymlinkFileStep linkSource2 = (MkdirAndSymlinkFileStep) steps.get(5);
-    assertEquals("src/com/facebook/katana/AndroidManifest.xml", linkSource2.getSource());
-    assertEquals(pathToSrcDir + "/AndroidManifest.xml", linkSource2.getTarget());
+    assertEquals(Paths.get("src/com/facebook/katana/AndroidManifest.xml"), linkSource2.getSource());
+    assertEquals(Paths.get(pathToSrcDir + "/AndroidManifest.xml"), linkSource2.getTarget());
 
     Step sixthStep = steps.get(6);
     assertTrue(sixthStep instanceof ShellStep);
@@ -235,8 +235,8 @@ public class GenruleTest {
     BuildTarget depTarget = new BuildTarget("//foo", "bar");
     BuildRule dep = new FakeBuildRule(BuildRuleType.JAVA_LIBRARY, depTarget) {
       @Override
-      public String getPathToOutputFile() {
-        return "buck-out/gen/foo/bar.jar";
+      public Path getPathToOutputFile() {
+        return Paths.get("buck-out/gen/foo/bar.jar");
       }
     };
     BuildRuleResolver ruleResolver = new BuildRuleResolver(ImmutableMap.of(depTarget, dep));
@@ -270,11 +270,6 @@ public class GenruleTest {
     return ExecutionContext.builder()
         .setConsole(new Console(Verbosity.SILENT, System.out, System.err, Ansi.withoutTty()))
         .setProjectFilesystem(new ProjectFilesystem(new File(".")) {
-          @Override
-          public Function<String, Path> getPathRelativizer() {
-            return IdentityPathRelativizer.getIdentityRelativizer();
-          }
-
           @Override
           public Path resolve(Path path) {
             return path;
@@ -367,7 +362,7 @@ public class GenruleTest {
   @Test
   public void replaceLocationOfFullyQualifiedBuildTarget() {
     ProjectFilesystem filesystem = EasyMock.createNiceMock(ProjectFilesystem.class);
-    EasyMock.expect(filesystem.getPathRelativizer()).andStubReturn(relativeToAbsolutePathFunction);
+    EasyMock.expect(filesystem.getAbsolutifier()).andStubReturn(ABSOLUTIFIER);
     EasyMock.replay(filesystem);
 
     BuildRuleResolver ruleResolver = new BuildRuleResolver();
@@ -426,12 +421,12 @@ public class GenruleTest {
     BuildTarget target = BuildTargetFactory.newInstance("//:example");
     Genrule rule = ruleResolver.buildAndAddToIndex(
         Genrule.newGenruleBuilder(new FakeAbstractBuildRuleBuilderParams())
-        .setRelativeToAbsolutePathFunctionForTesting(relativeToAbsolutePathFunction)
+        .setRelativeToAbsolutePathFunctionForTesting(ABSOLUTIFIER)
         .setBuildTarget(target)
         .setBash(Optional.of("ignored"))
-        .addSrc("in-dir.txt")
-        .addSrc("foo/bar.html")
-        .addSrc("other/place.txt")
+        .addSrc(Paths.get("in-dir.txt"))
+        .addSrc(Paths.get("foo/bar.html"))
+        .addSrc(Paths.get("other/place.txt"))
         .setOut("example-file"));
 
     ImmutableList.Builder<Step> builder = ImmutableList.builder();
@@ -442,16 +437,16 @@ public class GenruleTest {
 
     assertEquals(3, commands.size());
     MkdirAndSymlinkFileStep linkCmd = (MkdirAndSymlinkFileStep) commands.get(0);
-    assertEquals("in-dir.txt", linkCmd.getSource());
-    assertEquals(baseTmpPath + "in-dir.txt", linkCmd.getTarget());
+    assertEquals(Paths.get("in-dir.txt"), linkCmd.getSource());
+    assertEquals(Paths.get(baseTmpPath + "in-dir.txt"), linkCmd.getTarget());
 
     linkCmd = (MkdirAndSymlinkFileStep) commands.get(1);
-    assertEquals("foo/bar.html", linkCmd.getSource());
-    assertEquals(baseTmpPath + "foo/bar.html", linkCmd.getTarget());
+    assertEquals(Paths.get("foo/bar.html"), linkCmd.getSource());
+    assertEquals(Paths.get(baseTmpPath + "foo/bar.html"), linkCmd.getTarget());
 
     linkCmd = (MkdirAndSymlinkFileStep) commands.get(2);
-    assertEquals("other/place.txt", linkCmd.getSource());
-    assertEquals(baseTmpPath + "other/place.txt", linkCmd.getTarget());
+    assertEquals(Paths.get("other/place.txt"), linkCmd.getSource());
+    assertEquals(Paths.get(baseTmpPath + "other/place.txt"), linkCmd.getTarget());
   }
 
   private JavaBinaryRule createSampleJavaBinaryRule(BuildRuleResolver ruleResolver) {
@@ -461,7 +456,7 @@ public class GenruleTest {
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//java/com/facebook/util:util"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL)
-        .addSrc("java/com/facebook/util/ManifestGenerator.java"));
+        .addSrc(Paths.get("java/com/facebook/util/ManifestGenerator.java")));
 
     JavaBinaryRule javaBinary = ruleResolver.buildAndAddToIndex(
         JavaBinaryRule.newJavaBinaryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
@@ -480,7 +475,7 @@ public class GenruleTest {
         String.format("//%s:genrule", contextBasePath));
 
     Builder ruleBuilder = Genrule.newGenruleBuilder(new FakeAbstractBuildRuleBuilderParams())
-        .setRelativeToAbsolutePathFunctionForTesting(relativeToAbsolutePathFunction)
+        .setRelativeToAbsolutePathFunctionForTesting(ABSOLUTIFIER)
         .setBuildTarget(target)
         .setBash(Optional.of(originalCmd))
         .setOut("example-file");

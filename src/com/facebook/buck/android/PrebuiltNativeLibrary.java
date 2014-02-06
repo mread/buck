@@ -35,6 +35,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -54,10 +56,10 @@ import javax.annotation.Nullable;
 public class PrebuiltNativeLibrary extends AbstractBuildable implements NativeLibraryBuildable {
 
   private final boolean isAsset;
-  private final String libraryPath;
+  private final Path libraryPath;
   private final DirectoryTraverser directoryTraverser;
 
-  protected PrebuiltNativeLibrary(String nativeLibsDirectory,
+  protected PrebuiltNativeLibrary(Path nativeLibsDirectory,
                                   boolean isAsset,
                                   DirectoryTraverser directoryTraverser) {
     this.isAsset = isAsset;
@@ -71,20 +73,19 @@ public class PrebuiltNativeLibrary extends AbstractBuildable implements NativeLi
   }
 
   @Override
-  public String getLibraryPath() {
+  public Path getLibraryPath() {
     return libraryPath;
   }
 
   @Override
   public RuleKey.Builder appendDetailsToRuleKey(RuleKey.Builder builder) throws IOException {
     return builder
-        .set("nativeLibs", getLibraryPath())
         .set("is_asset", isAsset());
   }
 
   @Override
-  public Iterable<String> getInputsToCompareToOutput() {
-    ImmutableSortedSet.Builder<String> inputsToConsiderForCachingPurposes = ImmutableSortedSet
+  public Collection<Path> getInputsToCompareToOutput() {
+    ImmutableSortedSet.Builder<Path> inputsToConsiderForCachingPurposes = ImmutableSortedSet
         .naturalOrder();
 
     Buildables.addInputsToSortedSet(getLibraryPath(),
@@ -96,7 +97,7 @@ public class PrebuiltNativeLibrary extends AbstractBuildable implements NativeLi
 
   @Override
   @Nullable
-  public String getPathToOutputFile() {
+  public Path getPathToOutputFile() {
     // A prebuilt_native_library does not have a "primary output" at this time.
     return null;
   }
@@ -115,7 +116,7 @@ public class PrebuiltNativeLibrary extends AbstractBuildable implements NativeLi
 
     private boolean isAsset = false;
     @Nullable
-    private String nativeLibs = null;
+    private Path nativeLibs = null;
 
     private Builder(AbstractBuildRuleBuilderParams params) {
       super(params);
@@ -155,7 +156,7 @@ public class PrebuiltNativeLibrary extends AbstractBuildable implements NativeLi
       return this;
     }
 
-    public Builder setNativeLibsDirectory(String nativeLibs) {
+    public Builder setNativeLibsDirectory(Path nativeLibs) {
       this.nativeLibs = nativeLibs;
       return this;
     }

@@ -40,8 +40,8 @@ import java.util.List;
 
 public class JavaBinaryRuleTest {
 
-  private static final String PATH_TO_GUAVA_JAR = "third_party/guava/guava-10.0.1.jar";
-  private static final String PATH_TO_GENERATOR_JAR = "third_party/guava/generator.jar";
+  private static final Path PATH_TO_GUAVA_JAR = Paths.get("third_party/guava/guava-10.0.1.jar");
+  private static final Path PATH_TO_GENERATOR_JAR = Paths.get("third_party/guava/generator.jar");
 
   @Test
   public void testGetExecutableCommand() {
@@ -65,7 +65,7 @@ public class JavaBinaryRuleTest {
     ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(BuildTargetFactory.newInstance("//java/com/facebook/base:base"))
-        .addSrc("java/com/facebook/base/Base.java")
+        .addSrc(Paths.get("java/com/facebook/base/Base.java"))
         .addDep(BuildTargetFactory.newInstance("//third_party/guava:guava")));
 
     // java_binary //java/com/facebook/base:Main
@@ -85,19 +85,19 @@ public class JavaBinaryRuleTest {
 
     List<String> expectedCommand = ImmutableList.of("java", "-jar", expectedClasspath);
     ProjectFilesystem projectFilesystem = createMock(ProjectFilesystem.class);
-    Function<String, Path> pathRelativizer = new Function<String, Path>() {
+    Function<Path, Path> pathRelativizer = new Function<Path, Path>() {
       @Override
-      public Path apply(String path) {
-        return Paths.get(basePath, path);
+      public Path apply(Path path) {
+        return Paths.get(basePath).resolve(path);
       }
     };
-    expect(projectFilesystem.getPathRelativizer()).andReturn(pathRelativizer);
+    expect(projectFilesystem.getAbsolutifier()).andReturn(pathRelativizer);
     replay(projectFilesystem);
     assertEquals(expectedCommand, javaBinaryRule.getExecutableCommand(projectFilesystem));
     verify(projectFilesystem);
 
     assertFalse(
         "Library rules that are used exclusively by genrules should not be part of the classpath.",
-        expectedClasspath.contains(PATH_TO_GENERATOR_JAR));
+        expectedClasspath.contains(PATH_TO_GENERATOR_JAR.toString()));
   }
 }

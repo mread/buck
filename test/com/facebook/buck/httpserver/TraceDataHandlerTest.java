@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.file.Paths;
 import java.util.regex.Matcher;
 
 import javax.servlet.ServletException;
@@ -76,14 +77,15 @@ public class TraceDataHandlerTest extends EasyMockSupport {
     ProjectFilesystem projectFilesystem = createMock(ProjectFilesystem.class);
     expect(
         projectFilesystem.getInputSupplierForRelativePath(
-            "buck-out/log/traces/build.abcdef.trace"))
+            Paths.get("buck-out/log/traces/build.abcdef.trace")))
         .andReturn((InputSupplier) new InputSupplier<InputStream>() {
           @Override
           public InputStream getInput() throws IOException {
             return new ByteArrayInputStream("{\"foo\":\"bar\"}".getBytes());
           }
         });
-    TraceDataHandler traceDataHandler = new TraceDataHandler(projectFilesystem);
+    TraceDataHandler traceDataHandler = new TraceDataHandler(
+        new TracesHelper(projectFilesystem));
 
     replayAll();
     traceDataHandler.handle("/trace/abcdef",
@@ -116,14 +118,15 @@ public class TraceDataHandlerTest extends EasyMockSupport {
     ProjectFilesystem projectFilesystem = createMock(ProjectFilesystem.class);
     expect(
         projectFilesystem.getInputSupplierForRelativePath(
-            "buck-out/log/traces/build.abcdef.trace"))
+            Paths.get("buck-out/log/traces/build.abcdef.trace")))
         .andReturn((InputSupplier) new InputSupplier<InputStream>() {
           @Override
           public InputStream getInput() throws IOException {
             return new ByteArrayInputStream("{\"foo\":\"bar\"}".getBytes());
           }
         });
-    TraceDataHandler traceDataHandler = new TraceDataHandler(projectFilesystem);
+    TraceDataHandler traceDataHandler = new TraceDataHandler(
+        new TracesHelper(projectFilesystem));
 
     replayAll();
     traceDataHandler.handle("/trace/abcdef?callback=my.callback",

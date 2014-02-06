@@ -34,11 +34,14 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.hash.HashCode;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 public class FakeJavaLibraryRule extends FakeBuildRule implements JavaLibraryRule {
 
   private final static BuildableProperties OUTPUT_TYPE = new BuildableProperties(LIBRARY);
 
-  private ImmutableSortedSet<String> srcs = ImmutableSortedSet.of();
+  private ImmutableSortedSet<Path> srcs = ImmutableSortedSet.of();
 
   public FakeJavaLibraryRule(
       BuildTarget target,
@@ -78,23 +81,24 @@ public class FakeJavaLibraryRule extends FakeBuildRule implements JavaLibraryRul
 
   @Override
   public ImmutableSetMultimap<JavaLibraryRule, String> getTransitiveClasspathEntries() {
-    return ImmutableSetMultimap.of((JavaLibraryRule) this, getPathToOutputFile());
+    return ImmutableSetMultimap.of((JavaLibraryRule) this, getPathToOutputFile().toString());
   }
 
   @Override
-  public String getPathToOutputFile() {
-    return BuckConstant.GEN_DIR + "/" +
+  public Path getPathToOutputFile() {
+    return Paths.get(BuckConstant.GEN_DIR + "/" +
         getBuildTarget().getBasePathWithSlash() +
-        getBuildTarget().getShortName() + ".jar";
+        getBuildTarget().getShortName() + ".jar");
   }
 
   @Override
-  public ImmutableSortedSet<String> getJavaSrcs() {
+  public ImmutableSortedSet<Path> getJavaSrcs() {
     return srcs;
   }
 
-  public FakeJavaLibraryRule setJavaSrcs(ImmutableSortedSet<String> srcs) {
-    this.srcs = Preconditions.checkNotNull(srcs);
+  public FakeJavaLibraryRule setJavaSrcs(ImmutableSortedSet<Path> srcs) {
+    Preconditions.checkNotNull(srcs);
+    this.srcs = ImmutableSortedSet.copyOf(srcs);
     return this;
   }
 

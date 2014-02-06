@@ -17,6 +17,7 @@
 package com.facebook.buck.android;
 
 import static com.facebook.buck.util.BuckConstant.GEN_DIR;
+import static com.facebook.buck.util.BuckConstant.GEN_PATH;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -48,7 +49,7 @@ import com.facebook.buck.step.fs.MakeCleanDirectoryStep;
 import com.facebook.buck.step.fs.MkdirAndSymlinkFileStep;
 import com.facebook.buck.step.fs.MkdirStep;
 import com.facebook.buck.step.fs.RmStep;
-import com.facebook.buck.testutil.IdentityPathRelativizer;
+import com.facebook.buck.testutil.IdentityPathAbsolutifier;
 import com.facebook.buck.testutil.TestConsole;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.environment.Platform;
@@ -72,11 +73,11 @@ import java.util.Map;
  */
 public class ApkGenruleTest {
 
-  private static final Function<String, Path> relativeToAbsolutePathFunction =
-      new Function<String, Path>() {
+  private static final Function<Path, Path> relativeToAbsolutePathFunction =
+      new Function<Path, Path>() {
         @Override
-        public Path apply(String path) {
-          return Paths.get("/opt/local/fbandroid", path);
+        public Path apply(Path path) {
+          return Paths.get("/opt/local/fbandroid").resolve(path);
         }
       };
 
@@ -87,14 +88,14 @@ public class ApkGenruleTest {
     ruleResolver.buildAndAddToIndex(
         DefaultJavaLibraryRule.newJavaLibraryRuleBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(libAndroidTarget)
-        .addSrc("java/com/facebook/util/Facebook.java"));
+        .addSrc(Paths.get("java/com/facebook/util/Facebook.java")));
 
     BuildTarget keystoreTarget = BuildTargetFactory.newInstance("//keystore:debug");
     ruleResolver.buildAndAddToIndex(
         Keystore.newKeystoreBuilder(new FakeAbstractBuildRuleBuilderParams())
         .setBuildTarget(keystoreTarget)
-        .setStore("keystore/debug.keystore")
-        .setProperties("keystore/debug.keystore.properties")
+        .setStore(Paths.get("keystore/debug.keystore"))
+        .setProperties(Paths.get("keystore/debug.keystore.properties"))
         .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     ruleResolver.buildAndAddToIndex(
@@ -154,9 +155,9 @@ public class ApkGenruleTest {
         .setJavaPackageFinder(EasyMock.createNiceMock(JavaPackageFinder.class))
         .setEventBus(BuckEventBusFactory.newInstance())
         .build();
-    ImmutableSortedSet<String> inputsToCompareToOutputs = ImmutableSortedSet.of(
-        "src/com/facebook/key.properties",
-        "src/com/facebook/signer.py");
+    ImmutableSortedSet<Path> inputsToCompareToOutputs = ImmutableSortedSet.of(
+        Paths.get("src/com/facebook/key.properties"),
+        Paths.get("src/com/facebook/signer.py"));
     assertEquals(inputsToCompareToOutputs,
         apkGenrule.getInputsToCompareToOutput());
 
@@ -173,7 +174,7 @@ public class ApkGenruleTest {
         ImmutableList.of(
             "rm",
             "-f",
-            apkGenrule.getPathToOutputFile()),
+            apkGenrule.getPathToOutputFile().toString()),
         rmCommand.getShellCommand(executionContext));
 
     Step secondStep = steps.get(1);
@@ -203,19 +204,19 @@ public class ApkGenruleTest {
         thirdMkdirCommand.getPath());
 
     MkdirAndSymlinkFileStep linkSource1 = (MkdirAndSymlinkFileStep) steps.get(4);
-    assertEquals("src/com/facebook/signer.py", linkSource1.getSource());
-    assertEquals(relativePathToSrcDir + "/signer.py", linkSource1.getTarget());
+    assertEquals(Paths.get("src/com/facebook/signer.py"), linkSource1.getSource());
+    assertEquals(Paths.get(relativePathToSrcDir + "/signer.py"), linkSource1.getTarget());
 
     MkdirAndSymlinkFileStep linkSource2 = (MkdirAndSymlinkFileStep) steps.get(5);
-    assertEquals("src/com/facebook/key.properties", linkSource2.getSource());
-    assertEquals(relativePathToSrcDir + "/key.properties", linkSource2.getTarget());
+    assertEquals(Paths.get("src/com/facebook/key.properties"), linkSource2.getSource());
+    assertEquals(Paths.get(relativePathToSrcDir + "/key.properties"), linkSource2.getTarget());
 
     Step seventhStep = steps.get(6);
     assertTrue(seventhStep instanceof ShellStep);
     ShellStep genruleCommand = (ShellStep) seventhStep;
     assertEquals("genrule", genruleCommand.getShortName());
     assertEquals(new ImmutableMap.Builder<String, String>()
-        .put("APK", relativeToAbsolutePathFunction.apply(GEN_DIR + "/fb4a.apk").toString())
+        .put("APK", relativeToAbsolutePathFunction.apply(GEN_PATH.resolve("fb4a.apk")).toString())
         .put("OUT", expectedApkOutput).build(),
         genruleCommand.getEnvironmentVariables(executionContext));
     assertEquals(
@@ -230,8 +231,8 @@ public class ApkGenruleTest {
         .setConsole(new TestConsole())
         .setProjectFilesystem(new ProjectFilesystem(new File(".")) {
           @Override
-          public Function<String, Path> getPathRelativizer() {
-            return IdentityPathRelativizer.getIdentityRelativizer();
+          public Function<Path, Path> getAbsolutifier() {
+            return IdentityPathAbsolutifier.getIdentityAbsolutifier();
           }
 
           @Override

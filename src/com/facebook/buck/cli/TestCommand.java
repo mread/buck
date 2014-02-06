@@ -47,6 +47,8 @@ import com.facebook.buck.step.fs.MakeCleanDirectoryStep;
 import com.facebook.buck.test.TestCaseSummary;
 import com.facebook.buck.test.TestResultSummary;
 import com.facebook.buck.test.TestResults;
+import com.facebook.buck.test.resultgroups.TestResultsGrouper;
+import com.facebook.buck.util.Console;
 import com.facebook.buck.util.HumanReadableException;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.Verbosity;
@@ -73,15 +75,16 @@ import org.w3c.dom.Element;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.io.Writer;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
+import javax.annotation.Nullable;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -125,10 +128,13 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
 
     Build build = buildCommand.getBuild();
 
-    Iterable<TestRule> results = getCandidateRulesByIncludedLabels(
-        build.getDependencyGraph(), options.getIncludedLabels());
+    Iterable<TestRule> results = getCandidateRules(build.getDependencyGraph());
 
     results = filterTestRules(options, results);
+    if (options.isPrintMatchingTestRules()) {
+      printMatchingTestRules(console, results);
+      return 0;
+    }
 
     BuildContext buildContext = build.getBuildContext();
     ExecutionContext buildExecutionContext = build.getExecutionContext();
@@ -154,11 +160,11 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
 
     // Add all JAR files produced by java libraries that we are testing to -instrpath.
     for (JavaLibraryRule path : rulesUnderTest) {
-      String pathToOutput = path.getPathToOutputFile();
+      Path pathToOutput = path.getPathToOutputFile();
       if (pathToOutput == null) {
         continue;
       }
-      pathsToInstrumentedClasses.add(projectFilesystem.getPathRelativizer().apply(pathToOutput));
+      pathsToInstrumentedClasses.add(projectFilesystem.getAbsolutifier().apply(pathToOutput));
     }
 
     // Run EMMA instrumentation. This will instrument the classes we generated in the build command.
@@ -175,7 +181,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       ImmutableSet<JavaLibraryRule> rulesUnderTest,
       Optional<DefaultJavaPackageFinder> defaultJavaPackageFinderOptional,
       ProjectFilesystem projectFilesystem,
-      String outputDirectory) {
+      Path outputDirectory) {
     ImmutableSet.Builder<String> srcDirectories = ImmutableSet.builder();
     ImmutableSet.Builder<Path> pathsToClasses = ImmutableSet.builder();
 
@@ -186,11 +192,11 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       if (!sourceFolderPath.isEmpty()) {
         srcDirectories.addAll(sourceFolderPath);
       }
-      String pathToOutput = rule.getPathToOutputFile();
+      Path pathToOutput = rule.getPathToOutputFile();
       if (pathToOutput == null) {
         continue;
       }
-      pathsToClasses.add(Paths.get(pathToOutput));
+      pathsToClasses.add(pathToOutput);
     }
 
     return new GenerateCodeCoverageReportStep(srcDirectories.build(),
@@ -206,7 +212,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       JavaLibraryRule rule,
       Optional<DefaultJavaPackageFinder> defaultJavaPackageFinderOptional,
       ProjectFilesystem projectFilesystem) {
-    ImmutableSet<String> javaSrcPaths = rule.getJavaSrcs();
+    ImmutableSet<Path> javaSrcPaths = rule.getJavaSrcs();
 
     // A Java library rule with just resource files has an empty javaSrcPaths.
     if (javaSrcPaths.isEmpty()) {
@@ -226,7 +232,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     // folders for the source paths.
     Set<String> srcFolders = Sets.newHashSet();
     loopThroughSourcePath:
-    for (String javaSrcPath : javaSrcPaths) {
+    for (Path javaSrcPath : javaSrcPaths) {
       if (!JavaTestRule.isGeneratedFile(javaSrcPath)) {
 
         // If the source path is already under a known source folder, then we can skip this
@@ -272,9 +278,6 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       BuildTargetException, BuildFileParseException {
     Logging.setLoggingLevelForVerbosity(console.getVerbosity());
 
-    // Create artifact cache to initialize Cassandra connection, if appropriate.
-    ArtifactCache artifactCache = getArtifactCache();
-
     // The first step is to parse all of the build files. This will populate the parser and find all
     // of the test rules.
     RawRulePredicate predicate = new RawRulePredicate() {
@@ -303,6 +306,13 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     });
 
     testRules = filterTestRules(options, testRules);
+    if (options.isPrintMatchingTestRules()) {
+      printMatchingTestRules(console, testRules);
+      return 0;
+    }
+
+    // Create artifact cache to initialize Cassandra connection, if appropriate.
+    ArtifactCache artifactCache = getArtifactCache();
 
     // Build all of the test rules.
     Build build = options.createBuild(options.getBuckConfig(),
@@ -325,9 +335,24 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
         options);
   }
 
+  private void printMatchingTestRules(Console console, Iterable<TestRule> testRules) {
+    PrintStream out = console.getStdOut();
+    ImmutableList<TestRule> list = ImmutableList.copyOf(testRules);
+    out.println(String.format("MATCHING TEST RULES (%d):", list.size()));
+    out.println("");
+    if (list.isEmpty()) {
+      out.println("  (none)");
+    } else {
+      for (TestRule testRule : testRules) {
+        out.println("  " + testRule.getBuildTarget());
+      }
+    }
+    out.println("");
+  }
+
   @VisibleForTesting
-  static Iterable<TestRule> getCandidateRulesByIncludedLabels(
-      DependencyGraph graph, final ImmutableSet<String> includedLabels) {
+  static Iterable<TestRule> getCandidateRules(
+      DependencyGraph graph) {
     AbstractBottomUpTraversal<BuildRule, List<TestRule>> traversal =
         new AbstractBottomUpTraversal<BuildRule, List<TestRule>>(graph) {
 
@@ -337,11 +362,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       public void visit(BuildRule buildRule) {
         if (buildRule instanceof TestRule) {
           TestRule testRule = (TestRule)buildRule;
-          // If includedSet not empty, only select test rules that contain included label.
-          if (includedLabels.isEmpty() ||
-              !Sets.intersection(testRule.getLabels(), includedLabels).isEmpty()) {
-            results.add(testRule);
-          }
+          results.add(testRule);
         }
       }
 
@@ -371,7 +392,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     builder.addAll(Iterables.filter(testRules, new Predicate<TestRule>() {
       @Override
       public boolean apply(TestRule rule) {
-        return Sets.intersection(rule.getLabels(), options.getExcludedLabels()).isEmpty();
+        return options.isMatchedByLabelOptions(rule.getLabels());
       }
     }));
 
@@ -400,6 +421,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       ExecutionContext executionContext,
       StepRunner stepRunner,
       final TestCommandOptions options) throws IOException {
+
     ImmutableSet<JavaLibraryRule> rulesUnderTest;
     // If needed, we first run instrumentation on the class files.
     if (options.isCodeCoverageEnabled()) {
@@ -427,7 +449,10 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     }
 
     getBuckEventBus().post(TestRunEvent.started(
-        options.isRunAllTests(), options.getArgumentsFormattedAsBuildTargets()));
+        options.isRunAllTests(),
+        options.getTestSelectorListOptional(),
+        options.shouldExplainTestSelectorList(),
+        options.getArgumentsFormattedAsBuildTargets()));
 
     // Start running all of the tests. The result of each java_test() rule is represented as a
     // ListenableFuture.
@@ -438,23 +463,12 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     // Buck, not the test being run.
     Verbosity verbosity = console.getVerbosity();
     final boolean printTestResults = (verbosity != Verbosity.SILENT);
-    FutureCallback<TestResults> onTestFinishedCallback = new FutureCallback<TestResults>() {
 
-      @Override
-      public void onSuccess(TestResults testResults) {
-        if (printTestResults) {
-          getBuckEventBus().post(IndividualTestEvent.finished(
-              options.getArgumentsFormattedAsBuildTargets(), testResults));
-        }
-      }
-
-      @Override
-      public void onFailure(Throwable throwable) {
-        // This should never happen, but if it does, that means that something has gone awry, so
-        // we should bubble it up.
-        throwable.printStackTrace(getStdErr());
-      }
-    };
+    // For grouping results!
+    TestResultsGrouper grouper = null;
+    if (options.isIgnoreFailingDependencies()) {
+      grouper = new TestResultsGrouper(tests);
+    }
 
     TestRuleKeyFileHelper testRuleKeyFileHelper = new TestRuleKeyFileHelper(
         executionContext.getProjectFilesystem());
@@ -463,12 +477,16 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
 
       // Determine whether the test needs to be executed.
       boolean isTestRunRequired =
-          isTestRunRequiredForTest(test, executionContext, testRuleKeyFileHelper);
+          isTestRunRequiredForTest(test, executionContext, testRuleKeyFileHelper,
+              options.getTestSelectorListOptional().isPresent());
       if (isTestRunRequired) {
         getBuckEventBus().post(IndividualTestEvent.started(
             options.getArgumentsFormattedAsBuildTargets()));
         ImmutableList.Builder<Step> stepsBuilder = ImmutableList.builder();
-        List<Step> testSteps = test.runTests(buildContext, executionContext);
+        List<Step> testSteps = test.runTests(
+            buildContext,
+            executionContext,
+            options.getTestSelectorListOptional());
         if (!testSteps.isEmpty()) {
           stepsBuilder.addAll(testSteps);
           stepsBuilder.add(testRuleKeyFileHelper.createRuleKeyInDirStep(test));
@@ -484,8 +502,11 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
           stepRunner.runStepsAndYieldResult(steps,
               getCachingStatusTransformingCallable(
                   isTestRunRequired,
-                  test.interpretTestResults(executionContext)),
+                  test.interpretTestResults(executionContext,
+                      /*isUsingTestSelectors*/ options.getTestSelectorListOptional().isPresent())),
               test.getBuildTarget());
+      FutureCallback<TestResults> onTestFinishedCallback =
+          getFutureCallback(grouper, test, options, printTestResults);
       Futures.addCallback(testResults, onTestFinishedCallback);
       results.add(testResults);
     }
@@ -520,7 +541,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       try {
         Optional<DefaultJavaPackageFinder> defaultJavaPackageFinderOptional =
             options.getJavaPackageFinder();
-        String outputDirectory;
+        Path outputDirectory;
         if (options.isJacocoEnabled()) {
           outputDirectory = JUnitStep.JACOCO_OUTPUT_DIR;
         } else {
@@ -543,6 +564,41 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     });
 
     return failures ? 1 : 0;
+  }
+
+  private FutureCallback<TestResults> getFutureCallback(
+      @Nullable final TestResultsGrouper grouper,
+      final TestRule testRule,
+      final TestCommandOptions options,
+      final boolean printTestResults) {
+    return new FutureCallback<TestResults>() {
+
+      @Override
+      public void onSuccess(TestResults testResults) {
+        if (printTestResults) {
+          if (grouper == null) {
+            postTestResults(testResults);
+          } else {
+            Map<TestRule, TestResults> postableTestResultsMap = grouper.post(testRule, testResults);
+            for (TestResults rr : postableTestResultsMap.values()) {
+              postTestResults(rr);
+            }
+          }
+        }
+      }
+
+      private void postTestResults(TestResults testResults) {
+        getBuckEventBus().post(IndividualTestEvent.finished(
+            options.getArgumentsFormattedAsBuildTargets(), testResults));
+      }
+
+      @Override
+      public void onFailure(Throwable throwable) {
+        // This should never happen, but if it does, that means that something has gone awry, so
+        // we should bubble it up.
+        throwable.printStackTrace(getStdErr());
+      }
+    };
   }
 
   private Callable<TestResults> getCachingStatusTransformingCallable(
@@ -571,13 +627,19 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
   static boolean isTestRunRequiredForTest(
       TestRule test,
       ExecutionContext executionContext,
-      TestRuleKeyFileHelper testRuleKeyFileHelper)
+      TestRuleKeyFileHelper testRuleKeyFileHelper,
+      boolean isRunningWithTestSelectors)
       throws IOException {
     boolean isTestRunRequired;
     BuildRuleSuccess.Type successType;
     if (executionContext.isDebugEnabled()) {
       // If debug is enabled, then we should always run the tests as the user is expecting to
       // hook up a debugger.
+      isTestRunRequired = true;
+    } else if (isRunningWithTestSelectors) {
+      // As a feature to aid developers, we'll assume that when we are using test selectors,
+      // we should always run each test (and never look at the cache.)
+      // TODO When #3090004 and #3436849 are closed we can respect the cache again.
       isTestRunRequired = true;
     } else if (((successType = test.getBuildResultType()) != null)
                && successType == BuildRuleSuccess.Type.MATCHING_RULE_KEY
@@ -594,7 +656,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
   }
 
   /**
-   * Generates the set of rules under test.
+   * Generates the set of Java library rules under test.
    */
   private ImmutableSet<JavaLibraryRule> getRulesUnderTest(Iterable<TestRule> tests) {
     ImmutableSet.Builder<JavaLibraryRule> rulesUnderTest = ImmutableSet.builder();
@@ -603,7 +665,20 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     for (TestRule test : tests) {
       if (test instanceof JavaTestRule) {
         JavaTestRule javaTestRule = (JavaTestRule) test;
-        rulesUnderTest.addAll(javaTestRule.getSourceUnderTest());
+        ImmutableSet<BuildRule> sourceUnderTest = javaTestRule.getSourceUnderTest();
+        for (BuildRule buildRule : sourceUnderTest) {
+          if (buildRule instanceof JavaLibraryRule) {
+            JavaLibraryRule javaLibraryRule = (JavaLibraryRule) buildRule;
+            rulesUnderTest.add(javaLibraryRule);
+          } else {
+            throw new HumanReadableException(
+                "Test '%s' is a java_test() " +
+                "but it is testing module '%s' " +
+                "which is not a java_library()!",
+                test.getBuildTarget(),
+                buildRule.getBuildTarget());
+          }
+        }
       }
     }
 

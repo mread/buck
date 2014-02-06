@@ -35,6 +35,7 @@ import com.google.common.collect.Maps;
 
 import org.junit.Test;
 
+import java.nio.file.Paths;
 import java.util.Map;
 
 public class AndroidInstrumentationApkTest {
@@ -51,8 +52,8 @@ public class AndroidInstrumentationApkTest {
       public ImmutableSetMultimap<JavaLibraryRule, String> getTransitiveClasspathEntries() {
         ImmutableSetMultimap.Builder<JavaLibraryRule, String> builder =
             ImmutableSetMultimap.builder();
-        builder.put(javaLibrary1, javaLibrary1.getPathToOutputFile());
-        builder.put(this, this.getPathToOutputFile());
+        builder.put(javaLibrary1, javaLibrary1.getPathToOutputFile().toString());
+        builder.put(this, this.getPathToOutputFile().toString());
         return builder.build();
       }
     };
@@ -67,8 +68,8 @@ public class AndroidInstrumentationApkTest {
       public ImmutableSetMultimap<JavaLibraryRule, String> getTransitiveClasspathEntries() {
         ImmutableSetMultimap.Builder<JavaLibraryRule, String> builder =
             ImmutableSetMultimap.builder();
-        builder.put(javaLibrary3, javaLibrary3.getPathToOutputFile());
-        builder.put(this, this.getPathToOutputFile());
+        builder.put(javaLibrary3, javaLibrary3.getPathToOutputFile().toString());
+        builder.put(this, this.getPathToOutputFile().toString());
         return builder.build();
       }
     };
@@ -84,8 +85,8 @@ public class AndroidInstrumentationApkTest {
         Keystore.newKeystoreBuilder(
             new FakeAbstractBuildRuleBuilderParams())
             .setBuildTarget(new BuildTarget("//keystores", "debug"))
-            .setProperties("keystores/debug.properties")
-            .setStore("keystores/debug.keystore")
+            .setProperties(Paths.get("keystores/debug.properties"))
+            .setStore(Paths.get("keystores/debug.keystore"))
             .addVisibilityPattern(BuildTargetPattern.MATCH_ALL));
 
     // AndroidBinaryRule transitively depends on :lib1, :lib2, and :lib3.

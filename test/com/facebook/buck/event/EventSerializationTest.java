@@ -32,10 +32,12 @@ import com.facebook.buck.rules.CacheResult;
 import com.facebook.buck.rules.DependencyGraph;
 import com.facebook.buck.rules.FakeBuildRule;
 import com.facebook.buck.rules.IndividualTestEvent;
+import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.rules.TestRunEvent;
 import com.facebook.buck.test.TestCaseSummary;
 import com.facebook.buck.test.TestResultSummary;
 import com.facebook.buck.test.TestResults;
+import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.timing.Clock;
 import com.facebook.buck.timing.DefaultClock;
 import com.fasterxml.jackson.core.JsonFactory;
@@ -117,7 +119,8 @@ public class EventSerializationTest {
     String message = new ObjectMapper().writeValueAsString(event);
     assertJsonEquals("{\"timestamp\":%d,\"nanoTime\":%d,\"threadId\":%d,\"buildId\":\"%s\"," +
         "\"buildRule\":{\"type\":{\"name\":\"java_library\",\"testRule\":false}," +
-        "\"name\":\"//fake:rule\"},\"type\":\"BuildRuleStarted\"}", message);
+        "\"name\":\"//fake:rule\"},\"ruleKeySafe\":\"aaaa\",\"type\":\"BuildRuleStarted\"}",
+        message);
   }
 
   @Test
@@ -130,17 +133,19 @@ public class EventSerializationTest {
     String message = new ObjectMapper().writeValueAsString(event);
     assertJsonEquals("{\"timestamp\":%d,\"nanoTime\":%d,\"threadId\":%d,\"buildId\":\"%s\"," +
         "\"status\":\"SUCCESS\",\"cacheResult\":\"MISS\",\"buildRule\":{\"type\":" +
-        "{\"name\":\"java_library\",\"testRule\":false},\"name\":\"//fake:rule\"},\"type\":" +
-        "\"BuildRuleFinished\"}", message);
+        "{\"name\":\"java_library\",\"testRule\":false},\"name\":\"//fake:rule\"}," +
+        "\"ruleKeySafe\":\"aaaa\",\"type\":\"BuildRuleFinished\"}", message);
   }
 
   @Test
   public void testTestRunEventStarted() throws IOException {
-    TestRunEvent.Started event = TestRunEvent.started(true, ImmutableList.<String>of());
+    TestRunEvent.Started event = TestRunEvent.started(
+        true, Optional.<TestSelectorList>absent(), false, ImmutableList.<String>of());
     event.configure(timestamp, nanoTime, threadId, buildId);
     String message = new ObjectMapper().writeValueAsString(event);
     assertJsonEquals("{\"timestamp\":%d,\"nanoTime\":%d,\"threadId\":%d,\"buildId\":\"%s\"," +
-        "\"runAllTests\":true,\"targetNames\":[],\"type\":\"RunStarted\"}", message);
+        "\"runAllTests\":true,\"testSelectorListOptional\":{\"present\":false}," +
+        "\"targetNames\":[],\"type\":\"RunStarted\"}", message);
   }
 
   @Test
@@ -153,7 +158,8 @@ public class EventSerializationTest {
         "results\":[{\"testCases\":[{\"testCaseName\":\"Test1\",\"testResults\":[{\"testName\":" +
         "null,\"success\":false,\"time\":0,\"message\":null,\"stacktrace\":null,\"stdOut\":null," +
         "\"stdErr\":null}],\"failureCount\":1,\"totalTime\":0,\"success\":false}]," +
-        "\"failureCount\":1,\"success\":false}],\"type\":\"RunComplete\"}", message);
+        "\"failureCount\":1,\"dependenciesPassTheirTests\":true,\"success\":false}]," +
+        "\"type\":\"RunComplete\"}", message);
   }
 
   @Test
@@ -175,15 +181,18 @@ public class EventSerializationTest {
         "\"results\":{\"testCases\":[{\"testCaseName\":\"Test1\",\"testResults\":[{\"testName\"" +
         ":null,\"success\":false,\"time\":0,\"message\":null,\"stacktrace\":null,\"stdOut\":null," +
         "\"stdErr\":null}],\"failureCount\":1,\"totalTime\":0,\"success\":false}]," +
-        "\"failureCount\":1,\"success\":false},\"type\":\"ResultsAvailable\"}", message);
+        "\"failureCount\":1,\"dependenciesPassTheirTests\":true,\"success\":false}," +
+        "\"type\":\"ResultsAvailable\"}", message);
   }
 
   private BuildRule generateFakeBuildRule() {
     BuildTarget buildTarget = BuildTargetFactory.newInstance("//fake:rule");
-    return new FakeBuildRule(BuildRuleType.JAVA_LIBRARY,
+    FakeBuildRule result = new FakeBuildRule(BuildRuleType.JAVA_LIBRARY,
         buildTarget,
         ImmutableSortedSet.<BuildRule>of(),
         ImmutableSet.<BuildTargetPattern>of());
+    result.setRuleKey(new RuleKey("aaaa"));
+    return result;
   }
 
   private TestResults generateFakeTestResults() {

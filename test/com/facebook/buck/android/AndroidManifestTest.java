@@ -39,6 +39,8 @@ import org.easymock.EasyMock;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -59,10 +61,10 @@ public class AndroidManifestTest {
     AndroidManifest androidManifestRule = (AndroidManifest) buildRule.getBuildable();
 
     assertEquals(
-        ImmutableList.of("java/com/example/AndroidManifestSkeleton.xml"),
+        ImmutableList.of(Paths.get("java/com/example/AndroidManifestSkeleton.xml")),
         ImmutableList.copyOf(androidManifestRule.getInputsToCompareToOutput()));
     assertEquals(
-        BuckConstant.GEN_DIR + "/java/com/example/AndroidManifest__manifest__.xml",
+        BuckConstant.GEN_PATH.resolve("java/com/example/AndroidManifest__manifest__.xml"),
         androidManifestRule.getPathToOutputFile());
   }
 
@@ -79,9 +81,9 @@ public class AndroidManifestTest {
     Step generateManifestStep = steps.get(2);
     assertEquals(
         new GenerateManifestStep(
-            "java/com/example/AndroidManifestSkeleton.xml",
-            /* libraryManifestPaths */ ImmutableSet.<String>of(),
-            BuckConstant.GEN_DIR + "/java/com/example/AndroidManifest__manifest__.xml"),
+            Paths.get("java/com/example/AndroidManifestSkeleton.xml"),
+            /* libraryManifestPaths */ ImmutableSet.<Path>of(),
+            BuckConstant.GEN_PATH.resolve("java/com/example/AndroidManifest__manifest__.xml")),
         generateManifestStep);
 
     EasyMock.verify(buildContext);

@@ -40,6 +40,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.util.Enumeration;
 import java.util.Map;
 import java.util.Set;
@@ -59,10 +60,10 @@ import javax.annotation.Nullable;
 public class JarDirectoryStep implements Step {
 
   /** Where to write the new JAR file. */
-  private final String pathToOutputFile;
+  private final Path pathToOutputFile;
 
   /** A collection of directories/ZIP/JAR files to include in the generated JAR file. */
-  private final ImmutableSet<String> entriesToJar;
+  private final ImmutableSet<Path> entriesToJar;
 
   /** If specified, the Main-Class to list in the manifest of the generated JAR file. */
   @Nullable
@@ -70,7 +71,7 @@ public class JarDirectoryStep implements Step {
 
   /** If specified, the Manifest file to use for the generated JAR file.  */
   @Nullable
-  private final String manifestFile;
+  private final Path manifestFile;
 
   /**
    * Creates a JAR from the specified entries (most often, classpath entries).
@@ -86,10 +87,10 @@ public class JarDirectoryStep implements Step {
    *     generated JAR.
    * @param manifestFile If specified, the path to the manifest file to use with this JAR.
    */
-  public JarDirectoryStep(String pathToOutputFile,
-                          Set<String> entriesToJar,
+  public JarDirectoryStep(Path pathToOutputFile,
+                          Set<Path> entriesToJar,
                           @Nullable String mainClass,
-                          @Nullable String manifestFile) {
+                          @Nullable Path manifestFile) {
     this.pathToOutputFile = Preconditions.checkNotNull(pathToOutputFile);
     this.entriesToJar = ImmutableSet.copyOf(entriesToJar);
     this.mainClass = mainClass;
@@ -141,7 +142,7 @@ public class JarDirectoryStep implements Step {
 
       Set<String> alreadyAddedEntries = Sets.newHashSet();
       ProjectFilesystem projectFilesystem = context.getProjectFilesystem();
-      for (String entry : entriesToJar) {
+      for (Path entry : entriesToJar) {
         File file = projectFilesystem.getFileForRelativePath(entry);
         if (file.isFile()) {
           // Assume the file is a ZIP/JAR file.

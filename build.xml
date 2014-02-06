@@ -18,6 +18,9 @@
   <property name="testclasses.dir" value="${build.dir}/testclasses" />
   <property name="javadoc.dir" value="${build.dir}/javadoc" />
   <property name="client.dir" value="third-party/nailgun" />
+  <property name="test.class" value="Test" />
+  <property name="javacc.gensrc.dir" value="${build.dir}/javacc" />
+  <property name="javacc.test.dir" value="${build.dir}/testjavacc" />
 
   <fileset dir="${lib.dir}" id="buck.jars">
     <include name="args4j-2.0.26.jar" />
@@ -51,6 +54,7 @@
     <include name="java/astyanax/slf4j-api-1.7.2.jar" />
     <include name="java/astyanax/slf4j-log4j12-1.7.2.jar" />
     <include name="java/closure-templates/soy-2012-12-21-no-guava.jar" />
+    <include name="java/dd-plist/dd-plist.jar" />
     <include name="java/gson/gson-2.2.4.jar" />
     <include name="java/jetty/jetty-all-9.0.4.v20130625.jar" />
     <include name="java/jetty/servlet-api.jar" />
@@ -77,8 +81,8 @@
   </target>
 
   <!-- Default target so that a command line build can 
-       do more than one thing. -->
-  <target name="default" depends="jar, dx, client" />
+       do more than one thing.  'success' must be the last dependency. -->
+  <target name="default" depends="compile, dx, client, javacc-tests, success" />
 
   <target name="checkversion">
     <!-- The nio Files class was only introduced in Java 7. -->
@@ -112,8 +116,26 @@
     </javac>
   </target>
 
+  <target name="javacc">
+    <mkdir dir="${javacc.gensrc.dir}/com/facebook/buck/apple/xcode/xcconfig" />
+    <javacc target="src/com/facebook/buck/apple/xcode/xcconfig/XcconfigParser.jj"
+            outputdirectory="${javacc.gensrc.dir}/com/facebook/buck/apple/xcode/xcconfig"
+            javacchome="third-party/java/javacc"
+            static="false"
+    />
+  </target>
+
+  <target name="javacc-tests">
+    <mkdir dir="${javacc.test.dir}/com/facebook/buck/javacc" />
+    <javacc target="test/com/facebook/buck/javacc/Simple1.jj"
+            outputdirectory="${javacc.test.dir}/com/facebook/buck/javacc"
+            javacchome="third-party/java/javacc"
+            static="false"
+        />
+  </target>
+
   <target name="compile"
-          depends="compile-testrunner, compile-abi-processor"
+          depends="compile-testrunner, compile-abi-processor, javacc"
           description="compile Java source code">
     <ant inheritAll="false" antfile="third-party/java/emma-2.0.5312/build.xml" target="core.package" />
     <ant inheritAll="false" antfile="third-party/java/jacoco-0.6.4/build.xml" target="build" />
@@ -126,6 +148,7 @@
            >
       <src path="${src.dir}" />
       <src path="${aosp.src.dir}" />
+      <src path="${javacc.gensrc.dir}" />
       <exclude name="com/facebook/buck/cli/quickstart/**" />
       <exclude name="com/facebook/buck/java/abi/**" />
       <exclude name="com/facebook/buck/junit/**" />
@@ -136,6 +159,7 @@
       <compilerarg value="-implicit:class" />
     </javac>
   </target>
+
 
   <target name="dx">
   </target>
@@ -157,6 +181,13 @@
     </jar>
   </target>
 
+  <!-- The buck wrapper script checks the output file from this target
+       to determine whether Buck needs to be built. -->
+  <target name="success"
+          description="Run after a successful build to indicate that a rebuild is unnecessary.">
+    <touch file="${build.dir}/successful-build" />
+  </target>
+
   <path id="tests.classpath">
     <path refid="classpath" />
     <fileset dir="${lib.dir}" >
@@ -174,17 +205,18 @@
   </path>
 
   <target name="compile-tests"
-          depends="compile"
+          depends="compile, javacc-tests"
           >
     <mkdir dir="${testclasses.dir}" />
-    <javac srcdir="${test.dir}"
-           excludes="**/testdata/**"
+    <javac excludes="**/testdata/**"
            destdir="${testclasses.dir}"
            classpathref="tests.classpath"
            debug="on"
            deprecation="on"
            includeAntRuntime="no"
            >
+      <src path="${test.dir}" />
+      <src path="${javacc.test.dir}" />
       <compilerarg value="-Xlint:rawtypes" />
       <compilerarg value="-Xlint:unchecked" />
     </javac>
@@ -211,7 +243,7 @@
             Do not exclude tests that start with "Abstract", as there are some tests for abstract
             classes.
           -->
-          <include name="**/*Test.java" />
+          <include name="**/*${test.class}.java" />
           <exclude name="**/testdata/**" />
         </fileset>
       </batchtest>
@@ -250,7 +282,7 @@
     </pmd>
   </target>
 
-  <target name="test" depends="java-test, py-test, lint" description="runs the unit tests" />
+  <target name="test" depends="java-test, py-test" description="runs the unit tests" />
 
   <target name="javadoc" description="generates HTML documentation for Java code"
       depends="compile">
@@ -265,10 +297,13 @@
         <exclude name="com/facebook/buck/cli/quickstart/**" />
         <exclude name="**/BUCK" />
         <exclude name="**/*.iml"/>
+        <exclude name="**/*.jj"/>
         <exclude name="**/*.py"/>
         <exclude name="**/*.pyc"/>
         <exclude name="**/*.sh"/>
         <exclude name="**/*.soy"/>
+      </fileset>
+      <fileset dir="${javacc.gensrc.dir}">
       </fileset>
       <link href="http://docs.oracle.com/javase/7/docs/api/" />
       <link href="http://docs.guava-libraries.googlecode.com/git-history/v15.0/javadoc/" />

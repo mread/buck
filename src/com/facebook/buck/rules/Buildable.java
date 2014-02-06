@@ -21,6 +21,8 @@ import com.facebook.buck.step.Step;
 import com.google.common.collect.ImmutableSortedSet;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -43,7 +45,7 @@ public interface Buildable {
    * cases the inputs may be ordered in any way the rule feels most appropriate.
    */
   // TODO(simons): Use the Description's constructor arg to generate these.
-  public Iterable<String> getInputsToCompareToOutput();
+  public Collection<Path> getInputsToCompareToOutput();
 
   /**
    * When this method is invoked, all of its dependencies will have been built.
@@ -61,11 +63,13 @@ public interface Buildable {
    * {@link #getBuildSteps(BuildContext, BuildableContext)} method. The use of this method should be
    * restricted to things like {@code buck targets --show_output}.
    *
+   * If the {@link Buildable} outputs multiple files, this returns null.
+   *
    * @return the relative path to the primary output of the build rule. If non-null, this path must
    *     identify a single file (as opposed to a directory).
    */
   @Nullable
-  public String getPathToOutputFile();
+  public Path getPathToOutputFile();
 
   /**
    * A {@link Buildable} may employ graph enhancement to alter its dependencies. If it does this, it

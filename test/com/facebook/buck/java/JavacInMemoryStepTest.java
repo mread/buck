@@ -21,7 +21,7 @@ import static org.junit.Assert.assertEquals;
 import com.facebook.buck.event.BuckEventBusFactory;
 import com.facebook.buck.rules.BuildDependencies;
 import com.facebook.buck.step.ExecutionContext;
-import com.facebook.buck.testutil.IdentityPathRelativizer;
+import com.facebook.buck.testutil.IdentityPathAbsolutifier;
 import com.facebook.buck.testutil.TestConsole;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.environment.Platform;
@@ -63,8 +63,8 @@ public class JavacInMemoryStepTest extends EasyMockSupport {
     ExecutionContext context = ExecutionContext.builder()
         .setProjectFilesystem(new ProjectFilesystem(new File(".")) {
           @Override
-          public Function<String, Path> getPathRelativizer() {
-            return IdentityPathRelativizer.getIdentityRelativizer();
+          public Function<Path, Path> getAbsolutifier() {
+            return IdentityPathAbsolutifier.getIdentityAbsolutifier();
           }
         })
         .setConsole(new TestConsole())
@@ -87,12 +87,12 @@ public class JavacInMemoryStepTest extends EasyMockSupport {
 
   private JavacInMemoryStep createTestStep(BuildDependencies buildDependencies) {
     return new JavacInMemoryStep(
-          /* outputDirectory */ ".",
-          /* javaSourceFilePaths */ ImmutableSet.of("foobar.java"),
+          /* outputDirectory */ Paths.get("."),
+          /* javaSourceFilePaths */ ImmutableSet.of(Paths.get("foobar.java")),
           /* transitiveClasspathEntries */ ImmutableSet.of("bar.jar", "foo.jar"),
           /* declaredClasspathEntries */ ImmutableSet.of("foo.jar"),
           /* JavacOptions */ JavacOptions.DEFAULTS,
-          /* pathToOutputAbiFile */ Optional.<String>absent(),
+          /* pathToOutputAbiFile */ Optional.<Path>absent(),
           /* invokingRule */ Optional.<String>absent(),
           /* buildDependencies */ buildDependencies,
           /* suggestBuildRules */ Optional.<JavacInMemoryStep.SuggestBuildRules>absent(),

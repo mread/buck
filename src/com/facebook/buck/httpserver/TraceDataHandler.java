@@ -16,8 +16,6 @@
 
 package com.facebook.buck.httpserver;
 
-import com.facebook.buck.util.BuckConstant;
-import com.facebook.buck.util.ProjectFilesystem;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.io.CharStreams;
@@ -48,10 +46,10 @@ class TraceDataHandler extends AbstractHandler {
   @VisibleForTesting
   static final Pattern CALLBACK_PATTERN = Pattern.compile("[\\w\\.]+");
 
-  private final ProjectFilesystem projectFilesystem;
+  private final TracesHelper tracesHelper;
 
-  TraceDataHandler(ProjectFilesystem projectFilesystem) {
-    this.projectFilesystem = Preconditions.checkNotNull(projectFilesystem);
+  TraceDataHandler(TracesHelper tracesHelper) {
+    this.tracesHelper = Preconditions.checkNotNull(tracesHelper);
   }
 
   @Override
@@ -78,7 +76,6 @@ class TraceDataHandler extends AbstractHandler {
     }
 
     String id = matcher.group(1);
-    String pathToTrace = getPathToTrace(id);
 
     response.setContentType(MediaType.JAVASCRIPT_UTF_8.toString());
     response.setStatus(HttpServletResponse.SC_OK);
@@ -95,10 +92,10 @@ class TraceDataHandler extends AbstractHandler {
       }
     }
 
-    InputSupplier<? extends InputStream> inputSupplier = projectFilesystem
-        .getInputSupplierForRelativePath(pathToTrace);
-    InputStreamReader inputStreamReader = new InputStreamReader(inputSupplier.getInput());
-    CharStreams.copy(inputStreamReader, responseWriter);
+    InputSupplier<? extends InputStream> inputSupplier = tracesHelper.getInputForTrace(id);
+    try (InputStreamReader inputStreamReader = new InputStreamReader(inputSupplier.getInput())) {
+      CharStreams.copy(inputStreamReader, responseWriter);
+    }
 
     if (hasValidCallbackParam) {
       responseWriter.write(");\n");
@@ -107,10 +104,4 @@ class TraceDataHandler extends AbstractHandler {
     response.flushBuffer();
     baseRequest.setHandled(true);
   }
-
-  private static String getPathToTrace(String id) {
-    String pathToTrace = String.format(BuckConstant.BUCK_TRACE_DIR + "/build.%s.trace", id);
-    return pathToTrace;
-  }
-
 }

@@ -18,6 +18,7 @@ package com.facebook.buck.rules;
 import com.google.common.collect.ImmutableSortedSet;
 
 import java.io.IOException;
+import java.nio.file.Path;
 
 import javax.annotation.Nullable;
 
@@ -29,7 +30,7 @@ public interface AnnotationProcessingData {
     }
 
     @Override
-    public ImmutableSortedSet<String> getSearchPathElements() {
+    public ImmutableSortedSet<Path> getSearchPathElements() {
       return ImmutableSortedSet.of();
     }
 
@@ -50,7 +51,7 @@ public interface AnnotationProcessingData {
 
     @Override
     @Nullable
-    public String getGeneratedSourceFolderName() {
+    public Path getGeneratedSourceFolderName() {
       return null;
     }
 
@@ -69,7 +70,7 @@ public interface AnnotationProcessingData {
    * Path to search for annotation processors.
    * Each element is a path relative to the project root.
    */
-  public ImmutableSortedSet<String> getSearchPathElements();
+  public ImmutableSortedSet<Path> getSearchPathElements();
 
   /**
    * The set of fully-qualified names of annotation processor classes.
@@ -97,5 +98,5 @@ public interface AnnotationProcessingData {
    * The name of the root folder where annotation processing source should be generated.
    */
   @Nullable
-  public String getGeneratedSourceFolderName();
+  public Path getGeneratedSourceFolderName();
 }

@@ -36,7 +36,9 @@ import com.facebook.buck.util.ProjectFilesystem;
 import com.google.common.base.Charsets;
 import com.google.common.base.Function;
 import com.google.common.base.Optional;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
@@ -71,37 +73,40 @@ public class SmartDexingStepTest extends EasyMockSupport {
   @Test
   public void testInputResolverWithMultipleOutputs() throws IOException {
     File primaryOutDir = tmpDir.newFolder("primary-out");
-    File primaryOut = new File(primaryOutDir, "primary.jar");
-    Set<String> primaryIn = ImmutableSet.of("input/a.jar", "input/b.jar", "input/c.jar");
+      File primaryOut = new File(primaryOutDir, "primary.jar");
+    Set<Path> primaryIn = ImmutableSet.of(
+        Paths.get("input/a.jar"), Paths.get("input/b.jar"), Paths.get("input/c.jar"));
     File secondaryOutDir = tmpDir.newFolder("secondary-out");
     File secondaryInDir = tmpDir.newFolder("secondary-in");
     File secondaryInFile = new File(secondaryInDir, "2.jar");
     Files.write(new byte[]{0}, secondaryInFile);
 
+    Multimap<Path, Path> secondaryOutputToInputFiles =
+        ImmutableListMultimap.of(
+            Paths.get(new File(secondaryOutDir, "2.dex.jar").getPath()),
+            Paths.get(secondaryInFile.getPath()));
     InputResolver resolver = new InputResolver(
-        "primary-out/primary.jar",
-        primaryIn,
-        Optional.of("secondary-out"),
-        Optional.of("secondary-in"));
+        Paths.get("primary-out/primary.jar"),
+        Suppliers.ofInstance(primaryIn),
+        Optional.of(Paths.get("secondary-out")),
+        Optional.of(Suppliers.ofInstance(secondaryOutputToInputFiles)));
     assertTrue("Expected secondary output", resolver.hasSecondaryOutput());
     final ProjectFilesystem projectFilesystem = new ProjectFilesystem(tmpDir.getRoot());
-    Multimap<File, File> outputToInputs = resolver.createOutputToInputs(DexStore.JAR,
-        projectFilesystem);
+    Multimap<File, File> outputToInputs = resolver.createOutputToInputs(projectFilesystem);
     assertEquals("Expected 2 output artifacts", 2, outputToInputs.keySet().size());
 
     MoreAsserts.assertIterablesEquals(
         "Detected inconsistency with primary input arguments",
-        Iterables.transform(primaryIn, new Function<String, File>() {
+        Iterables.transform(primaryIn, new Function<Path, File>() {
           @Override
-          public File apply(String input) {
+          public File apply(Path input) {
             return projectFilesystem.getFileForRelativePath(input);
           }
         }),
         outputToInputs.get(primaryOut));
 
     // Make sure that secondary-out/2.dex.jar came from secondary-in/2.jar.
-    File secondaryOutFile = new File(secondaryOutDir,
-        SmartDexingStep.transformInputToDexOutput(secondaryInFile, DexStore.JAR));
+    File secondaryOutFile = new File(secondaryOutDir, "2.dex.jar");
     MoreAsserts.assertIterablesEquals(
         "Detected inconsistency with secondary output arguments",
         ImmutableSet.of(secondaryInFile),
@@ -132,9 +137,9 @@ public class SmartDexingStepTest extends EasyMockSupport {
 
     DxPseudoRule rule = new DxPseudoRule(context,
         ImmutableSet.of(testIn.toPath()),
-        outputFile.getPath(),
+        outputFile.toPath(),
         outputHashFile,
-        /* optimizeDex */ false);
+        EnumSet.of(DxStep.Option.NO_OPTIMIZE));
     assertFalse("'dummy' is not a matching input hash", rule.checkIsCached());
 
     // Write the real hash into the output hash file and ensure that checkIsCached now
@@ -150,7 +155,7 @@ public class SmartDexingStepTest extends EasyMockSupport {
   public void testCreateDxStepForDxPseudoRuleWithXzOutput() {
     ImmutableList<Path> filesToDex = ImmutableList.of(
         Paths.get("foo.dex.jar"), Paths.get("bar.dex.jar"));
-    String outputPath = "classes.dex.jar.xz";
+    Path outputPath = Paths.get("classes.dex.jar.xz");
     EnumSet<DxStep.Option> dxOptions = EnumSet.noneOf(DxStep.Option.class);
     Step dxStep = SmartDexingStep.createDxStepForDxPseudoRule(filesToDex, outputPath, dxOptions);
 
@@ -174,7 +179,7 @@ public class SmartDexingStepTest extends EasyMockSupport {
   public void testCreateDxStepForDxPseudoRuleWithDexOutput() {
     ImmutableList<Path> filesToDex = ImmutableList.of(
         Paths.get("foo.dex.jar"), Paths.get("bar.dex.jar"));
-    String outputPath = "classes.dex";
+    Path outputPath = Paths.get("classes.dex");
     EnumSet<DxStep.Option> dxOptions = EnumSet.noneOf(DxStep.Option.class);
     Step dxStep = SmartDexingStep.createDxStepForDxPseudoRule(filesToDex, outputPath, dxOptions);
 
@@ -189,7 +194,7 @@ public class SmartDexingStepTest extends EasyMockSupport {
   public void testCreateDxStepForDxPseudoRuleWithDexJarOutput() {
     ImmutableList<Path> filesToDex = ImmutableList.of(
         Paths.get("foo.dex.jar"), Paths.get("bar.dex.jar"));
-    String outputPath = "classes.dex.jar";
+    Path outputPath = Paths.get("classes.dex.jar");
     EnumSet<DxStep.Option> dxOptions = EnumSet.noneOf(DxStep.Option.class);
     Step dxStep = SmartDexingStep.createDxStepForDxPseudoRule(filesToDex, outputPath, dxOptions);
 
@@ -204,7 +209,7 @@ public class SmartDexingStepTest extends EasyMockSupport {
   public void testCreateDxStepForDxPseudoRuleWithUnrecognizedOutput() {
     ImmutableList<Path> filesToDex = ImmutableList.of(
         Paths.get("foo.dex.jar"), Paths.get("bar.dex.jar"));
-    String outputPath = "classes.flex";
+    Path outputPath = Paths.get("classes.flex");
     EnumSet<DxStep.Option> dxOptions = EnumSet.noneOf(DxStep.Option.class);
     SmartDexingStep.createDxStepForDxPseudoRule(filesToDex, outputPath, dxOptions);
   }
