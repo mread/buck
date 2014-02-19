@@ -23,6 +23,8 @@ import com.facebook.buck.testutil.integration.DebuggableTemporaryFolder;
 import com.facebook.buck.testutil.integration.ProjectWorkspace;
 import com.facebook.buck.testutil.integration.ProjectWorkspace.ProcessResult;
 import com.facebook.buck.testutil.integration.TestDataHelper;
+import com.facebook.buck.util.AndroidDirectoryResolver;
+import com.facebook.buck.util.DefaultAndroidDirectoryResolver;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.google.common.base.Joiner;
 import com.google.common.io.Files;
@@ -34,6 +36,7 @@ import org.kohsuke.args4j.CmdLineException;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 
 /**
  * Integration test for the {@code buck quickstart} command.
@@ -55,14 +58,18 @@ public class QuickstartIntegrationTest {
         this, "empty_project", quickstartDirectory);
     quickstartWorkspace.setUp();
 
+    AndroidDirectoryResolver androidDirectoryResolver =
+        new DefaultAndroidDirectoryResolver(new ProjectFilesystem(new File(".")));
+
     // looks at local.properties, ANDROID_SDK, and ANDROID_HOME
-    File androidSdk = AbstractCommandOptions.findAndroidSdkDir(new ProjectFilesystem(new File("."))).orNull();
+    Path androidSdk =
+        androidDirectoryResolver.findAndroidSdkDirSafe().orNull();
 
     ProcessResult result = quickstartWorkspace.runBuckCommand("quickstart",
         "--dest-dir",
         destDir.getRoot().getAbsolutePath(),
         "--android-sdk",
-        androidSdk.getAbsolutePath());
+        androidSdk.toAbsolutePath().toString());
 
     result.assertExitCode(0);
 
@@ -99,6 +106,7 @@ public class QuickstartIntegrationTest {
       "`buck targets` should display a list of targets.",
       Joiner.on('\n').join("//apps/myapp:app",
         "//apps/myapp:app#aapt_package",
+        "//apps/myapp:app#dex_merge",
         "//apps/myapp:app#uber_r_dot_java",
         "//apps/myapp:debug_keystore",
         "//apps/myapp:project_config",

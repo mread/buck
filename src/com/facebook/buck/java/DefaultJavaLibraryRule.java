@@ -26,6 +26,7 @@ import com.facebook.buck.graph.TraversableGraph;
 import com.facebook.buck.java.abi.AbiWriterProtocol;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.model.BuildTargetPattern;
+import com.facebook.buck.model.BuildTargets;
 import com.facebook.buck.rules.AbiRule;
 import com.facebook.buck.rules.AbstractBuildRuleBuilder;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
@@ -139,6 +140,8 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
 
   private final Optional<Path> javac;
 
+  private final Optional<String> javacVersion;
+
   @Nullable
   private JavaLibraryRule.Data buildOutput;
 
@@ -192,7 +195,8 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
         proguardConfig,
         exportedDeps,
         javacOptions,
-        Optional.<Path>absent());
+        Optional.<Path>absent(),
+        Optional.<String>absent());
   }
 
   protected DefaultJavaLibraryRule(BuildRuleParams buildRuleParams,
@@ -202,7 +206,8 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
                                    Optional<Path> proguardConfig,
                                    Set<BuildRule> exportedDeps,
                                    JavacOptions javacOptions,
-                                   Optional<Path> javac) {
+                                   Optional<Path> javac,
+                                   Optional<String> javacVersion) {
     super(buildRuleParams);
     this.srcs = ImmutableSortedSet.copyOf(srcs);
     this.resources = ImmutableSortedSet.copyOf(resources);
@@ -211,6 +216,7 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
     this.exportedDeps = ImmutableSortedSet.copyOf(exportedDeps);
     this.javacOptions = Preconditions.checkNotNull(javacOptions);
     this.javac = Preconditions.checkNotNull(javac);
+    this.javacVersion = Preconditions.checkNotNull(javacVersion);
 
     if (!srcs.isEmpty() || !resources.isEmpty()) {
       this.outputJar = Optional.of(getOutputJarPath(getBuildTarget()));
@@ -390,12 +396,7 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
   }
 
   private Path getPathToAbiOutputDir() {
-    BuildTarget target = getBuildTarget();
-    return Paths.get(String.format(
-        "%s/%slib__%s__abi",
-        BuckConstant.GEN_DIR,
-        target.getBasePathWithSlash(),
-        target.getShortName()));
+    return BuildTargets.getGenPath(getBuildTarget(), "lib__%s__abi");
   }
 
   private Path getPathToAbiOutputFile() {
@@ -403,18 +404,15 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
   }
 
   private static Path getOutputJarDirPath(BuildTarget target) {
-    return Paths.get(String.format(
-        "%s/%slib__%s__output",
-        BuckConstant.GEN_DIR,
-        target.getBasePathWithSlash(),
-        target.getShortName()));
+    return BuildTargets.getGenPath(target, "lib__%s__output");
   }
 
   private static Path getOutputJarPath(BuildTarget target) {
-    return Paths.get(String.format(
-        "%s/%s.jar",
-        getOutputJarDirPath(target),
-        target.getShortName()));
+    return Paths.get(
+        String.format(
+            "%s/%s.jar",
+            getOutputJarDirPath(target),
+            target.getShortName()));
   }
 
   /**
@@ -422,11 +420,7 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
    *     The return value does not end with a slash.
    */
   private static Path getClassesDir(BuildTarget target) {
-    return Paths.get(String.format(
-        "%s/%slib__%s__classes",
-        BuckConstant.BIN_DIR,
-        target.getBasePathWithSlash(),
-        target.getShortName()));
+    return BuildTargets.getBinPath(target, "lib__%s__classes");
   }
 
   /**
@@ -478,9 +472,11 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
 
   @Override
   public RuleKey.Builder appendToRuleKey(RuleKey.Builder builder) throws IOException {
-    super.appendToRuleKey(builder)
-        .set("exportedDeps", exportedDeps);
+    super.appendToRuleKey(builder);
     javacOptions.appendToRuleKey(builder);
+    if (javac.isPresent() && javacVersion.isPresent()) {
+      builder.set("javacVersion", javacVersion.get());
+    }
     return builder;
   }
 
@@ -588,6 +584,7 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
       MakeCleanDirectoryStep mkdirGeneratedSources =
           new MakeCleanDirectoryStep(annotationGenFolder);
       steps.add(mkdirGeneratedSources);
+      buildableContext.recordArtifactsInDirectory(annotationGenFolder);
     }
 
     // Always create the output directory, even if there are no .java files to compile because there
@@ -624,6 +621,7 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
           Collections.singleton(outputDirectory),
           /* mainClass */ null,
           /* manifestFile */ null));
+      buildableContext.recordArtifact(outputJar.get());
     }
 
     Preconditions.checkNotNull(abiKeySupplier,
@@ -654,9 +652,6 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
         return 0;
       }
     });
-
-    buildableContext.addMetadata(ABI_KEY_FOR_DEPS_ON_DISK_METADATA,
-        getAbiKeyForDeps().getHash());
   }
 
   /**
@@ -762,7 +757,7 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
    */
   @Override
   public JavaLibraryRule.Data initializeFromDisk(OnDiskBuildInfo onDiskBuildInfo) {
-    return JavaLibraryRules.initializeFromDisk(this, onDiskBuildInfo);
+    return JavaLibraryRules.initializeFromDisk(getBuildTarget(), onDiskBuildInfo);
   }
 
   @Override
@@ -856,18 +851,17 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
   @Override
   @Nullable
   public Path getPathToOutputFile() {
-    if (outputJar.isPresent()) {
-      return outputJar.get();
-    }
-    return null;
+    return outputJar.orNull();
   }
 
   public static Builder newJavaLibraryRuleBuilder(AbstractBuildRuleBuilderParams params) {
-    return newJavaLibraryRuleBuilder(Optional.<Path>absent(), params);
+    return newJavaLibraryRuleBuilder(Optional.<Path>absent(), Optional.<String>absent(), params);
   }
 
-  public static Builder newJavaLibraryRuleBuilder(Optional<Path> javac, AbstractBuildRuleBuilderParams params) {
-    return new Builder(javac, params);
+  public static Builder newJavaLibraryRuleBuilder(Optional<Path> javac,
+      Optional<String> javacVersion,
+      AbstractBuildRuleBuilderParams params) {
+    return new Builder(javac, javacVersion, params);
   }
 
   public static class Builder extends AbstractBuildRuleBuilder<DefaultJavaLibraryRule> implements
@@ -883,14 +877,18 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
     protected JavacOptions.Builder javacOptions = JavacOptions.builder();
     protected Optional<Path> proguardConfig = Optional.absent();
     protected final Optional<Path> javac;
+    protected final Optional<String> javacVersion;
 
     protected Builder(AbstractBuildRuleBuilderParams params) {
-      this(Optional.<Path>absent(), params);
+      this(Optional.<Path>absent(), Optional.<String>absent(), params);
     }
 
-    protected Builder(Optional<Path> javac, AbstractBuildRuleBuilderParams params) {
+    protected Builder(Optional<Path> javac,
+        Optional<String> javacVersion,
+        AbstractBuildRuleBuilderParams params) {
       super(params);
       this.javac = javac;
+      this.javacVersion = javacVersion;
       this.params = params;
     }
 
@@ -915,7 +913,8 @@ public class DefaultJavaLibraryRule extends DoNotUseAbstractBuildable
           proguardConfig,
           getBuildTargetsAsBuildRules(ruleResolver, exportedDeps),
           javacOptions.build(),
-          javac);
+          javac,
+          javacVersion);
     }
 
     public AnnotationProcessingParams.Builder getAnnotationProcessingBuilder() {

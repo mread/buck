@@ -16,6 +16,7 @@ java_library(
     '//src/com/facebook/buck/parser:project',
     '//src/com/facebook/buck/python:rules',
     '//src/com/facebook/buck/shell:rules',
+    '//src/com/facebook/buck/util:io',
     '//src/com/facebook/buck/util:exceptions',
   ],
   visibility = [
@@ -60,6 +61,7 @@ java_library(
     'DefaultOnDiskBuildInfo.java',
     'DependencyGraph.java',
     'Description.java',
+    'ExportDependencies.java',
     'FileSourcePath.java',
     'Hint.java',
     'JavaPackageFinder.java',
@@ -121,7 +123,6 @@ java_library(
     'DescribedRuleFactory.java',
     'DirArtifactCache.java',
     'DoNotUseAbstractBuildable.java',
-    'ExportDependencies.java',
     'IndividualTestEvent.java',
     'InitializableFromDisk.java',
     'InstallableApk.java',

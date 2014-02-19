@@ -96,13 +96,22 @@ public class TargetsCommand extends AbstractCommandRunner<TargetsCommandOptions>
       return 1;
     }
 
-    // Parse the entire dependency graph.
+    // Parse the entire dependency graph, or (if targets are specified),
+    // only the specified targets and their dependencies..
     PartialGraph graph;
     try {
-      graph = PartialGraph.createFullGraph(getProjectFilesystem(),
-          options.getDefaultIncludes(),
-          getParser(),
-          getBuckEventBus());
+      if (matchingBuildTargets.isEmpty()) {
+        graph = PartialGraph.createFullGraph(getProjectFilesystem(),
+            options.getDefaultIncludes(),
+            getParser(),
+            getBuckEventBus());
+      } else {
+        graph = PartialGraph.createPartialGraphIncludingRoots(
+            matchingBuildTargets,
+            options.getDefaultIncludes(),
+            getParser(),
+            getBuckEventBus());
+      }
     } catch (BuildTargetException | BuildFileParseException e) {
       console.printBuildFailureWithoutStacktrace(e);
       return 1;
@@ -125,7 +134,7 @@ public class TargetsCommand extends AbstractCommandRunner<TargetsCommandOptions>
         return 1;
       }
     } else {
-      printTargetsList(matchingBuildRules, options.isShowOutput());
+      printTargetsList(matchingBuildRules, options.isShowOutput(), options.isShowRuleKey());
     }
 
     return 0;
@@ -133,14 +142,21 @@ public class TargetsCommand extends AbstractCommandRunner<TargetsCommandOptions>
 
   @VisibleForTesting
   void printTargetsList(SortedMap<String, BuildRule> matchingBuildRules,
-      boolean showOutput) {
+      boolean showOutput,
+      boolean showRuleKey) throws IOException {
     for (Map.Entry<String, BuildRule> target : matchingBuildRules.entrySet()) {
       String output = target.getKey();
+      BuildRule buildRule = target.getValue();
+      if (showRuleKey) {
+        output += " " + buildRule.getRuleKey();
+      }
       if (showOutput) {
-        BuildRule buildRule = target.getValue();
-        Path outputPath = buildRule.getBuildable().getPathToOutputFile();
-        if (outputPath != null) {
-          output += " " + outputPath;
+        Buildable buildable = buildRule.getBuildable();
+        if (buildable != null) {
+          Path outputPath = buildable.getPathToOutputFile();
+          if (outputPath != null) {
+            output += " " + outputPath;
+          }
         }
       }
       getStdOut().println(output);

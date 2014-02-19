@@ -18,9 +18,9 @@ package com.facebook.buck.android;
 
 import com.facebook.buck.android.FilterResourcesStep.ResourceFilter;
 import com.facebook.buck.android.UberRDotJava.ResourceCompressionMode;
-import com.facebook.buck.dalvik.ZipSplitter;
 import com.facebook.buck.java.Classpaths;
 import com.facebook.buck.model.BuildTarget;
+import com.facebook.buck.model.BuildTargets;
 import com.facebook.buck.rules.AbstractBuildRuleBuilder;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
 import com.facebook.buck.rules.BuildRule;
@@ -31,9 +31,8 @@ import com.facebook.buck.rules.InstallableApk;
 import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.rules.SourcePath;
 import com.facebook.buck.util.HumanReadableException;
-import com.google.common.base.Function;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
@@ -75,27 +74,15 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
         PackageType.INSTRUMENTED,
         buildRulesToExcludeFromDex,
         // Do not split the test apk even if the tested apk is split
-        new DexSplitMode(
-            /* shouldSplitDex */ false,
-            ZipSplitter.DexSplitStrategy.MAXIMIZE_PRIMARY_DEX_SIZE,
-            DexStore.JAR,
-            /* useLinearAllocSplitDex */ false),
+        DexSplitMode.NO_SPLIT,
         apkUnderTest.isUseAndroidProguardConfigWithOptimizations(),
         apkUnderTest.getProguardConfig(),
         apkUnderTest.getResourceCompressionMode(),
-        apkUnderTest.getPrimaryDexPatterns(),
-        apkUnderTest.getLinearAllocHardLimit(),
-        apkUnderTest.getPrimaryDexClassesFile(),
         apkUnderTest.getCpuFilters(),
-
-        // TODO(mbolin, t3338497): Figure out why AndroidInstrumentationApk.Builder cannot pass in
-        // graphEnhancer.createDepsForPreDexing(ruleResolver) for this value.
-        // For now, do not specify any pre-dex deps so that the traditional dexing
-        // logic is used for an android_instrumentation_apk().
-        /* preDexDeps */ ImmutableSet.<IntermediateDexRule>of(),
-
+        BuildTargets.getBinPath(buildRuleParams.getBuildTarget(), ".dex/%s/classes.dex"),
         uberRDotJava,
         aaptPackageResourcesBuildable,
+        Optional.<PreDexMerge>absent(),
         apkUnderTest.getPreprocessJavaClassesDeps(),
         apkUnderTest.getPreprocessJavaClassesBash(),
         androidResourceDepsFinder,
@@ -157,17 +144,7 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
           .addAll(apkUnderTest.getBuildRulesToExcludeFromDex())
           .addAll(Classpaths.getClasspathEntries(apkUnderTest.getClasspathDeps()).keySet())
           .build();
-      ImmutableSet<BuildTarget> buildTargetsToExcludeFromDex = FluentIterable
-          .from(buildRulesToExcludeFromDex)
-          .transform(new Function<BuildRule, BuildTarget>() {
-            @Override
-            public BuildTarget apply(BuildRule input) {
-              return input.getBuildTarget();
-            }
-          })
-          .toSet();
-      AndroidBinaryGraphEnhancer graphEnhancer = new AndroidBinaryGraphEnhancer(
-          originalParams, buildTargetsToExcludeFromDex);
+      AndroidBinaryGraphEnhancer graphEnhancer = new AndroidBinaryGraphEnhancer(originalParams);
 
       ImmutableSortedSet<BuildRule> classpathDepsForInstrumentationApk =
           getBuildTargetsAsBuildRules(ruleResolver, classpathDeps.build());
@@ -198,23 +175,26 @@ public class AndroidInstrumentationApk extends AndroidBinaryRule {
         }
       };
 
-      AndroidBinaryGraphEnhancer.Result result = graphEnhancer.addBuildablesToCreateAaptResources(
-          ruleResolver,
-          /* resourceCompressionMode */ ResourceCompressionMode.DISABLED,
-          /* resourceFilter */ ResourceFilter.EMPTY_FILTER,
-          androidResourceDepsFinder,
-          manifest,
-          /* packageType */ PackageType.INSTRUMENTED,
-          apkUnderTest.getCpuFilters(),
-          /* preDexDeps */ ImmutableSet.<IntermediateDexRule>of(),
-          /* rDotJavaNeedsDexing */ false);
+      AndroidBinaryGraphEnhancer.AaptEnhancementResult aaptEnhancementResult =
+          graphEnhancer.addBuildablesToCreateAaptResources(
+              ruleResolver,
+              /* resourceCompressionMode */ ResourceCompressionMode.DISABLED,
+              /* resourceFilter */ ResourceFilter.EMPTY_FILTER,
+              androidResourceDepsFinder,
+              manifest,
+              /* packageType */ PackageType.INSTRUMENTED,
+              apkUnderTest.getCpuFilters(),
+              /* rDotJavaNeedsDexing */ false);
 
-      return new AndroidInstrumentationApk(result.getParams(),
+      BuildRuleParams newParams = originalParams.copyWithChangedDeps(graphEnhancer.getTotalDeps());
+
+      return new AndroidInstrumentationApk(
+          newParams,
           manifest,
           apkUnderTest,
           buildRulesToExcludeFromDex,
-          result.getUberRDotJava(),
-          result.getAaptPackageResources(),
+          aaptEnhancementResult.getUberRDotJava(),
+          aaptEnhancementResult.getAaptPackageResources(),
           androidResourceDepsFinder,
           getBuildTargetsAsBuildRules(ruleResolver, classpathDeps.build()),
           androidTransitiveDependencyGraph);

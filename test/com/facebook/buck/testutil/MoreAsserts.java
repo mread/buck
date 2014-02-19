@@ -19,17 +19,21 @@ package com.facebook.buck.testutil;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import com.facebook.buck.model.BuildTarget;
+import com.facebook.buck.rules.BuildRule;
 import com.facebook.buck.shell.ShellStep;
 import com.facebook.buck.step.ExecutionContext;
 import com.facebook.buck.step.Step;
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.base.Optional;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 
 import org.junit.Assert;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -65,7 +69,8 @@ public final class MoreAsserts {
     Set<E> extra = Sets.difference(actual, expected);
     boolean setsEqual = missing.isEmpty() && extra.isEmpty();
     Assert.assertTrue(
-        String.format("%s %nMissing elements:%n%s%nExtraneous elements:%n%s",
+        String.format(
+            "%s %nMissing elements:%n%s%nExtraneous elements:%n%s",
             userMessage, missing, extra),
         setsEqual);
   }
@@ -217,6 +222,50 @@ public final class MoreAsserts {
         userMessage,
         expectedStepDescriptions,
         commands);
+  }
+
+  public static void assertDepends(String userMessage, BuildRule rule, BuildTarget dep) {
+    assertDepends(userMessage, rule.getDeps(), dep);
+  }
+
+  public static void assertDepends(
+      String userMessage,
+      Collection<BuildRule> ruleDeps,
+      BuildTarget dep) {
+    for (BuildRule realDep : ruleDeps) {
+      BuildTarget target = realDep.getBuildTarget();
+      if (target.equals(dep)) {
+        return;
+      }
+    }
+    fail(userMessage);
+  }
+
+  public static void assertNotDepends(String userMessage, BuildRule rule, BuildTarget dep) {
+    assertNotDepends(userMessage, rule.getDeps(), dep);
+  }
+
+  public static void assertNotDepends(
+      String userMessage,
+      Collection<BuildRule> ruleDeps,
+      BuildTarget dep) {
+    for (BuildRule realDep : ruleDeps) {
+      BuildTarget target = realDep.getBuildTarget();
+      if (target.equals(dep)) {
+        fail(userMessage);
+      }
+    }
+  }
+
+  public static <T> void assertOptionalValueEquals(
+      String userMessage,
+      T expectedValue,
+      Optional<T> optionalValue) {
+    if (!optionalValue.isPresent()) {
+      failWith(userMessage, "Optional value is not present.");
+    }
+
+    assertEquals(userMessage, expectedValue, optionalValue.get());
   }
 
   private static String prefixWithUserMessage(@Nullable String userMessage, String message) {

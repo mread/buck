@@ -33,14 +33,18 @@ import com.facebook.buck.rules.RuleKey.Builder;
 import com.facebook.buck.rules.RuleKeyBuilderFactory;
 import com.facebook.buck.timing.Clock;
 import com.facebook.buck.timing.DefaultClock;
+import com.facebook.buck.util.AndroidDirectoryResolver;
 import com.facebook.buck.util.Ansi;
 import com.facebook.buck.util.Console;
+import com.facebook.buck.util.DefaultAndroidDirectoryResolver;
 import com.facebook.buck.util.DefaultFileHashCache;
 import com.facebook.buck.util.FileHashCache;
 import com.facebook.buck.util.HumanReadableException;
 import com.facebook.buck.util.MoreStrings;
+import com.facebook.buck.util.ProcessExecutor;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.ProjectFilesystemWatcher;
+import com.facebook.buck.util.ShutdownException;
 import com.facebook.buck.util.Verbosity;
 import com.facebook.buck.util.WatchServiceWatcher;
 import com.facebook.buck.util.WatchmanWatcher;
@@ -67,6 +71,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileSystems;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.Semaphore;
@@ -294,6 +299,23 @@ public final class Main {
   }
 
   @VisibleForTesting
+  static void resetDaemon() {
+    daemon = null;
+  }
+
+  @VisibleForTesting
+  static void registerFileWatcher(Object watcher) {
+    Preconditions.checkNotNull(daemon);
+    daemon.fileEventBus.register(watcher);
+  }
+
+  @VisibleForTesting
+  static void watchFilesystem() throws IOException {
+    Preconditions.checkNotNull(daemon);
+    daemon.filesystemWatcher.postEvents();
+  }
+
+  @VisibleForTesting
   public Main(PrintStream stdOut, PrintStream stdErr) {
     this.stdOut = Preconditions.checkNotNull(stdOut);
     this.stdErr = Preconditions.checkNotNull(stdErr);
@@ -433,9 +455,22 @@ public final class Main {
       // running commands such as `buck clean`.
       ArtifactCacheFactory artifactCacheFactory = new LoggingArtifactCacheFactory(buildEventBus);
 
+      // Configure the AndroidDirectoryResolver.
+      AndroidDirectoryResolver androidDirectoryResolver =
+          new DefaultAndroidDirectoryResolver(projectFilesystem);
+      Optional<Path> ndkDir = androidDirectoryResolver.findAndroidNdkDir();
+      Optional<String> ndkVersion = Optional.absent();
+      if (ndkDir.isPresent()) {
+        ndkVersion = Optional.of(androidDirectoryResolver.getNdkVersion(ndkDir.get()));
+        config.validateNdkVersion(ndkDir.get(), ndkVersion.get());
+      }
+
       // Create or get Parser and invalidate cached command parameters.
       Parser parser;
-      KnownBuildRuleTypes buildRuleTypes = KnownBuildRuleTypes.getConfigured(config);
+
+      KnownBuildRuleTypes buildRuleTypes =
+          KnownBuildRuleTypes.getConfigured(config, new ProcessExecutor(console), ndkVersion);
+
       if (isDaemon) {
         parser = getParserFromDaemon(context, projectFilesystem, config, console, commandEvent);
 
@@ -455,6 +490,7 @@ public final class Main {
           new CommandRunnerParams(
               console,
               projectFilesystem,
+              androidDirectoryResolver,
               buildRuleTypes,
               artifactCacheFactory,
               buildEventBus,
@@ -480,7 +516,12 @@ public final class Main {
       context.get().exit(exitCode); // Allow nailgun client to exit while outputting traces.
     }
     for (BuckEventListener eventListener : eventListeners) {
-      eventListener.outputTrace(buildId);
+      try {
+        eventListener.outputTrace(buildId);
+      } catch (RuntimeException e) {
+        System.err.println("Skipping over non-fatal error");
+        e.printStackTrace();
+      }
     }
     return exitCode;
   }
@@ -653,6 +694,10 @@ public final class Main {
           new Ansi(platform));
       console.printBuildFailure(e.getHumanReadableErrorMessage());
       return FAIL_EXIT_CODE;
+    } catch (ShutdownException e) {
+      stdErr.println(e);
+      e.printStackTrace(stdErr);
+      return 0;
     }
   }
 

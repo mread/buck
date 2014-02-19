@@ -24,6 +24,7 @@ package com.facebook.buck.apple.xcode.xcconfig;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Optional;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 
@@ -63,11 +64,21 @@ public class XcconfigParser {
     if (!readerOpt.isPresent()) {
       throw new ParseException("Cannot open file: " + inputPathInProject);
     }
-    return XcconfigParser.of(readerOpt.get(),
-                             Optional.<ProjectFilesystem>of(fileSystem),
-                             Optional.<Path>of(inputPathInProject),
-                             searchPaths)
-                         .file();
+    try {
+        return XcconfigParser.of(readerOpt.get(),
+                                 Optional.<ProjectFilesystem>of(fileSystem),
+                                 Optional.<Path>of(inputPathInProject),
+                                 searchPaths)
+                             .file();
+    } catch (Throwable e) {  // javacc does not parse java7's multi-exception catch
+      if (e instanceof ParseException || e instanceof TokenMgrError) {
+        ParseException e1 = new ParseException("In file: " + inputPathInProject);
+        e1.initCause(e);
+        throw e1;
+      } else {
+        throw Throwables.propagate(e);
+      }
+    }
   }
 
   public static PredicatedConfigValue parseSetting(String setting) throws ParseException {
@@ -164,16 +175,11 @@ PARSER_END(XcconfigParser)
 
 <CONDITION> TOKEN:
 {
-  < CONDITION_EQUAL: "=" > : CONDITION_RHS
-| < KEY: (["a"-"z"])+ >
+  < CONDITION_EQUAL: "=" >
+| < CONDITION_IDENTIFIER: (["a"-"z", "0"-"9", "_", "."])+ >
 | < STAR: "*" >
 | < COMMA: "," >
 | < RIGHT_BRACKET: "]" > : DEFAULT
-}
-
-<CONDITION_RHS> TOKEN:
-{
-  < CONDITION_LITERAL: (["a"-"z", "0"-"9", "_", "."])+ > : CONDITION
 }
 
 ImmutableList<PredicatedConfigValue> file() :
@@ -204,8 +210,8 @@ ImmutableList<PredicatedConfigValue> file() :
 PredicatedConfigValue buildSetting() :
 {
   Token key;
-  ImmutableSortedSet.Builder<Condition> conditions = ImmutableSortedSet.naturalOrder();;
-  ImmutableList.Builder<TokenValue> valueTokens = ImmutableList.builder();;
+  ImmutableSortedSet.Builder<Condition> conditions = ImmutableSortedSet.naturalOrder();
+  ImmutableList<TokenValue> tokenValues;
 }
 {
   (
@@ -214,72 +220,89 @@ PredicatedConfigValue buildSetting() :
                      (<COMMA> parseCondition(conditions))* )?
       <RIGHT_BRACKET> )*
     <EQUAL>
-    ( parseTokenValue(valueTokens) )+
+    tokenValues = parseTokenValues()
     (<EOL> | <EOF>)
   )
   {
-    return new PredicatedConfigValue(key.image, conditions.build(), valueTokens.build());
+    return new PredicatedConfigValue(key.image, conditions.build(), tokenValues);
   }
 }
 
 void parseCondition(ImmutableSortedSet.Builder<Condition> conditions) :
 {
   Token key;
-  Token value;
+  Token value = null;
   boolean isPrefix = false;
 }
 {
   (
-    key = <KEY>
+    key = <CONDITION_IDENTIFIER>
     <CONDITION_EQUAL>
-    value = <CONDITION_LITERAL>
-    ( <STAR> { isPrefix = true; } | {})
+    [ value = <CONDITION_IDENTIFIER> ]
+    [ <STAR> { isPrefix = true; } ]
   )
   {
-    conditions.add(new Condition(key.image, value.image, isPrefix));
+    conditions.add(new Condition(key.image, value == null ? "" : value.image, isPrefix));
   }
 }
 
-void parseTokenValue(ImmutableList.Builder<TokenValue> tokens) :
+ImmutableList<TokenValue> parseTokenValues() :
 {
-  Token value;
+  ImmutableList.Builder<TokenValue> valueTokens = ImmutableList.builder();
+  TokenValue tokenValue;
+  Token token;
 }
 {
   (
-    value = <VALUE_LITERAL>
-    {
-      tokens.add(TokenValue.literal(value.image));
-    }
-  )
-  | (
-    value = <DOLLAR_LITERAL>
-    {
-      String s = value.image;
-      tokens.add(TokenValue.interpolation(
-        ImmutableList.<TokenValue>of(TokenValue.literal(s.substring(1, s.length())))
-      ));
-    }
-  )
-  | (
+    ( token = <VALUE_LITERAL> | token = <RIGHT_PAREN> | token = <RIGHT_BRACE> )
+    { valueTokens.add(TokenValue.literal(token.image)); }
+  |
+    tokenValue = parseInterpolation()
+    { valueTokens.add(tokenValue); }
+  )*
+  {
+    return valueTokens.build();
+  }
+}
+
+TokenValue parseInterpolation() :
+{
+  TokenValue result;
+  Token token;
+}
+{
+  (
     <DOLLAR_LEFT_BRACE>
-    {
-        ImmutableList.Builder<TokenValue> nestedTokens = ImmutableList.builder();
-    }
-    (parseTokenValue(nestedTokens))+
+    result = parseInterpolationBody()
     <RIGHT_BRACE>
-    {
-      tokens.add(TokenValue.interpolation(nestedTokens.build()));
-    }
-  )
-  | (
+  |
     <DOLLAR_LEFT_PAREN>
-    {
-        ImmutableList.Builder<TokenValue> nestedTokens = ImmutableList.builder();
-    }
-    (parseTokenValue(nestedTokens))+
+    result = parseInterpolationBody()
     <RIGHT_PAREN>
-    {
-      tokens.add(TokenValue.interpolation(nestedTokens.build()));
-    }
+  |
+    token = <DOLLAR_LITERAL>
+    { result = TokenValue.interpolation(token.image.substring(1)); }
   )
+  {
+    return result;
+  }
+}
+
+TokenValue parseInterpolationBody() :
+{
+    ImmutableList.Builder<TokenValue> tokenValues = ImmutableList.builder();
+    Token token;
+    TokenValue interpolation;
+}
+{
+  (
+    token = <VALUE_LITERAL>
+    { tokenValues.add(TokenValue.literal(token.image)); }
+  |
+    interpolation = parseInterpolation()
+    { tokenValues.add(interpolation); }
+  )*
+  {
+    return TokenValue.interpolation(tokenValues.build());
+  }
 }

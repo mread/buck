@@ -153,7 +153,7 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
 
   @Override
   public JavaLibraryRule.Data initializeFromDisk(OnDiskBuildInfo onDiskBuildInfo) {
-    return JavaLibraryRules.initializeFromDisk(this, onDiskBuildInfo);
+    return JavaLibraryRules.initializeFromDisk(getBuildTarget(), onDiskBuildInfo);
   }
 
   @Override
@@ -210,6 +210,7 @@ public class PrebuiltJarRule extends DoNotUseAbstractBuildable
 
     JavaLibraryRules.addAccumulateClassNamesStep(this, buildableContext, steps);
 
+    buildableContext.recordArtifact(getBinaryJar());
     return steps.build();
   }
 

@@ -51,6 +51,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Beta
 public abstract class AbstractCachingBuildRule extends AbstractBuildRule implements BuildRule {
 
+  /**
+   * Key for {@link com.facebook.buck.rules.OnDiskBuildInfo} to identify
+   * the ABI key for the deps of a build rule.
+   */
+  @VisibleForTesting
+  public static final String ABI_KEY_FOR_DEPS_ON_DISK_METADATA = "ABI_KEY_FOR_DEPS";
+
   private final Buildable buildable;
 
   /**
@@ -217,9 +224,11 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
             private void recordBuildRuleSuccess(BuildResult result) {
               // Make sure that all of the local files have the same values they would as if the
               // rule had been built locally.
-              if (result.getSuccess().shouldWriteRecordedMetadataToDiskAfterBuilding()) {
+              BuildRuleSuccess.Type success = result.getSuccess();
+              if (success.shouldWriteRecordedMetadataToDiskAfterBuilding()) {
                 try {
-                  buildInfoRecorder.get().writeMetadataToDisk();
+                  boolean clearExistingMetadata = success.shouldClearAndOverwriteMetadataOnDisk();
+                  buildInfoRecorder.get().writeMetadataToDisk(clearExistingMetadata);
                 } catch (IOException e) {
                   onFailure(e);
                 }
@@ -376,26 +385,8 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
         // Therefore, if the ABI of its deps has not changed, there is nothing to rebuild.
         Sha1HashCode abiKeyForDeps = abiRule.getAbiKeyForDeps();
         Optional<Sha1HashCode> cachedAbiKeyForDeps = onDiskBuildInfo.getHash(
-            AbiRule.ABI_KEY_FOR_DEPS_ON_DISK_METADATA);
+            ABI_KEY_FOR_DEPS_ON_DISK_METADATA);
         if (abiKeyForDeps.equals(cachedAbiKeyForDeps.orNull())) {
-          // Re-copy the ABI metadata.
-          // TODO(mbolin): This seems really bad: there could be other metadata to copy, too?
-          buildInfoRecorder.addMetadata(
-              AbiRule.ABI_KEY_ON_DISK_METADATA,
-              onDiskBuildInfo.getValue(AbiRule.ABI_KEY_ON_DISK_METADATA).get());
-          buildInfoRecorder.addMetadata(
-              AbiRule.ABI_KEY_FOR_DEPS_ON_DISK_METADATA,
-              cachedAbiKeyForDeps.get().getHash());
-
-          // This key must be
-          // DexProducedFromJavaLibraryThatContainsClassFiles.LINEAR_ALLOC_KEY_ON_DISK_METADATA.
-          // This is a hack for an emergency fix that is a problem because of the TODO above.
-          String linearAllocKey = "linearalloc";
-          Optional<String> linearAlloc = onDiskBuildInfo.getValue(linearAllocKey);
-          if (linearAlloc.isPresent()) {
-            buildInfoRecorder.addMetadata(linearAllocKey, linearAlloc.get());
-          }
-
           return new BuildResult(BuildRuleSuccess.Type.MATCHING_DEPS_ABI_AND_RULE_KEY_NO_DEPS,
               CacheResult.LOCAL_KEY_UNCHANGED_HIT);
         }
@@ -425,16 +416,6 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
       executeCommandsNowThatDepsAreBuilt(context, onDiskBuildInfo, buildInfoRecorder);
     } catch (Exception e) {
       return new BuildResult(e);
-    }
-
-    // Given that the Buildable has built successfully, record that the output file has been
-    // written, assuming it has one.
-    // TODO(mbolin): Buildable.getSteps() should use BuildableContext such that Buildable is
-    // responsible for invoking recordArtifact() itself. Once that is done, this call to
-    // recordArtifact() should be deleted.
-    Path pathToOutputFile = buildable.getPathToOutputFile();
-    if (pathToOutputFile != null) {
-      buildInfoRecorder.recordArtifact(pathToOutputFile);
     }
 
     return new BuildResult(BuildRuleSuccess.Type.BUILT_LOCALLY, cacheResult);
@@ -511,6 +492,13 @@ public abstract class AbstractCachingBuildRule extends AbstractBuildRule impleme
     BuildableContext buildableContext = new DefaultBuildableContext(onDiskBuildInfo,
         buildInfoRecorder);
     List<Step> steps = buildable.getBuildSteps(context, buildableContext);
+
+    if (this instanceof AbiRule) {
+      buildableContext.addMetadata(
+          ABI_KEY_FOR_DEPS_ON_DISK_METADATA,
+          ((AbiRule)this).getAbiKeyForDeps().getHash());
+    }
+
     StepRunner stepRunner = context.getStepRunner();
     for (Step step : steps) {
       stepRunner.runStepForBuildTarget(step, getBuildTarget());

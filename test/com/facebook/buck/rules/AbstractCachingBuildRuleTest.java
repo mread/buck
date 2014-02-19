@@ -18,9 +18,11 @@ package com.facebook.buck.rules;
 
 import static com.facebook.buck.event.TestEventConfigerator.configureTestEvent;
 import static com.facebook.buck.rules.BuildRuleEvent.Finished;
+import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.eq;
 import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -189,10 +191,10 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
         context.createBuildInfoRecorder(
             eq(buildTarget),
             capture(ruleKeyForRecorder),
-            /* ruleKeyWithoutDepsForRecorder */ capture(new Capture<RuleKey>())))
+            /* ruleKeyWithoutDepsForRecorder */ anyObject(RuleKey.class)))
         .andReturn(buildInfoRecorder);
     expect(buildInfoRecorder.fetchArtifactForBuildable(
-            capture(new Capture<File>()),
+            anyObject(File.class),
             eq(artifactCache)))
         .andReturn(CacheResult.MISS);
 
@@ -215,7 +217,7 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
 
     // These methods should be invoked after the rule is built locally.
     buildInfoRecorder.recordArtifact(Paths.get(pathToOutputFile));
-    buildInfoRecorder.writeMetadataToDisk();
+    buildInfoRecorder.writeMetadataToDisk(/* clearExistingMetadata */ true);
     buildInfoRecorder.performUploadToArtifactCache(artifactCache, buckEventBus);
 
     // Attempting to build the rule should force a rebuild due to a cache miss.
@@ -326,8 +328,8 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
     BuildInfoRecorder buildInfoRecorder = createMock(BuildInfoRecorder.class);
     expect(buildContext.createBuildInfoRecorder(
            eq(buildTarget),
-           /* ruleKey */ capture(new Capture<RuleKey>()),
-           /* ruleKeyWithoutDeps */ capture(new Capture<RuleKey>())))
+           /* ruleKey */ anyObject(RuleKey.class),
+           /* ruleKeyWithoutDeps */ anyObject(RuleKey.class)))
         .andReturn(buildInfoRecorder);
 
     // Populate the metadata that should be read from disk.
@@ -339,20 +341,14 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
          // disk.
          .setRuleKeyWithoutDeps(new RuleKey(TestAbstractCachingBuildRule.RULE_KEY_WITHOUT_DEPS_HASH))
          // Similarly, the ABI key for the deps in memory should be the same as the one on disk.
-        .putMetadata(AbiRule.ABI_KEY_FOR_DEPS_ON_DISK_METADATA,
+        .putMetadata(
+            AbstractCachingBuildRule.ABI_KEY_FOR_DEPS_ON_DISK_METADATA,
             TestAbstractCachingBuildRule.ABI_KEY_FOR_DEPS_HASH)
         .putMetadata(AbiRule.ABI_KEY_ON_DISK_METADATA,
             "At some point, this method call should go away.");
 
-    // This metadata must be added to the buildInfoRecorder so that it is written as part of
-    // writeMetadataToDisk().
-    buildInfoRecorder.addMetadata(AbiRule.ABI_KEY_ON_DISK_METADATA,
-        "At some point, this method call should go away.");
-    buildInfoRecorder.addMetadata(AbiRule.ABI_KEY_FOR_DEPS_ON_DISK_METADATA,
-        TestAbstractCachingBuildRule.ABI_KEY_FOR_DEPS_HASH);
-
     // These methods should be invoked after the rule is built locally.
-    buildInfoRecorder.writeMetadataToDisk();
+    buildInfoRecorder.writeMetadataToDisk(/* clearExistingMetadata */ false);
 
     expect(buildContext.createOnDiskBuildInfoFor(buildTarget)).andReturn(onDiskBuildInfo);
     expect(buildContext.getExecutor()).andReturn(MoreExecutors.sameThreadExecutor());
@@ -377,6 +373,75 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
             BuildRuleStatus.SUCCESS,
             CacheResult.LOCAL_KEY_UNCHANGED_HIT,
             Optional.of(BuildRuleSuccess.Type.MATCHING_DEPS_ABI_AND_RULE_KEY_NO_DEPS)),
+            buckEventBus));
+
+    verifyAll();
+  }
+
+  @Test
+  public void testAbiKeyAutomaticallyPopulated() throws IOException, ExecutionException, InterruptedException {
+    BuildRuleParams buildRuleParams = new FakeBuildRuleParams(buildTarget);
+    TestAbstractCachingBuildRule buildRule =
+        new LocallyBuiltTestAbstractCachingBuildRule(buildRuleParams);
+
+    // The EventBus should be updated with events indicating how the rule was built.
+    BuckEventBus buckEventBus = BuckEventBusFactory.newInstance();
+    FakeBuckEventListener listener = new FakeBuckEventListener();
+    buckEventBus.register(listener);
+
+    BuildContext buildContext = createMock(BuildContext.class);
+    expect(buildContext.getProjectRoot()).andReturn(createMock(Path.class));
+    NoopArtifactCache artifactCache = new NoopArtifactCache();
+    expect(buildContext.getArtifactCache()).andStubReturn(artifactCache);
+    buildContext.logBuildInfo(anyObject(String.class), anyObject());
+    expectLastCall().asStub();
+    expect(buildContext.getStepRunner()).andStubReturn(null);
+
+
+    BuildInfoRecorder buildInfoRecorder = createMock(BuildInfoRecorder.class);
+    expect(buildContext.createBuildInfoRecorder(
+        eq(buildTarget),
+           /* ruleKey */ anyObject(RuleKey.class),
+           /* ruleKeyWithoutDeps */ anyObject(RuleKey.class)))
+        .andReturn(buildInfoRecorder);
+
+    expect(buildInfoRecorder.fetchArtifactForBuildable(anyObject(File.class), eq(artifactCache)))
+        .andReturn(CacheResult.MISS);
+
+    // Populate the metadata that should be read from disk.
+    OnDiskBuildInfo onDiskBuildInfo = new FakeOnDiskBuildInfo();
+
+    // This metadata must be added to the buildInfoRecorder so that it is written as part of
+    // writeMetadataToDisk().
+    buildInfoRecorder.addMetadata(AbstractCachingBuildRule.ABI_KEY_FOR_DEPS_ON_DISK_METADATA,
+        TestAbstractCachingBuildRule.ABI_KEY_FOR_DEPS_HASH);
+
+    // These methods should be invoked after the rule is built locally.
+    buildInfoRecorder.writeMetadataToDisk(/* clearExistingMetadata */ true);
+
+    expect(buildContext.createOnDiskBuildInfoFor(buildTarget)).andReturn(onDiskBuildInfo);
+    expect(buildContext.getExecutor()).andReturn(MoreExecutors.sameThreadExecutor());
+    expect(buildContext.getEventBus()).andReturn(buckEventBus).anyTimes();
+
+    replayAll();
+
+    ListenableFuture<BuildRuleSuccess> result = buildRule.build(buildContext);
+    assertTrue(
+        "We expect build() to be synchronous in this case, " +
+            "so the future should already be resolved.",
+        MoreFutures.isSuccess(result));
+
+    BuildRuleSuccess success = result.get();
+    assertEquals(BuildRuleSuccess.Type.BUILT_LOCALLY, success.getType());
+
+    List<BuckEvent> events = listener.getEvents();
+    assertEquals(events.get(0),
+        configureTestEvent(BuildRuleEvent.started(buildRule), buckEventBus));
+    assertEquals(events.get(1),
+        configureTestEvent(BuildRuleEvent.finished(buildRule,
+            BuildRuleStatus.SUCCESS,
+            CacheResult.MISS,
+            Optional.of(BuildRuleSuccess.Type.BUILT_LOCALLY)),
             buckEventBus));
 
     verifyAll();
@@ -543,6 +608,7 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
     @Override
     public List<Step> getBuildSteps(BuildContext context, BuildableContext buildableContext)
         throws IOException {
+      buildableContext.recordArtifact(pathToOutputFile);
       return buildSteps;
     }
 
@@ -652,6 +718,19 @@ public class AbstractCachingBuildRuleTest extends EasyMockSupport {
     @Override
     public Sha1HashCode getAbiKeyForDeps() {
       return new Sha1HashCode(ABI_KEY_FOR_DEPS_HASH);
+    }
+  }
+
+  private static class LocallyBuiltTestAbstractCachingBuildRule
+      extends TestAbstractCachingBuildRule {
+    LocallyBuiltTestAbstractCachingBuildRule(BuildRuleParams buildRuleParams) {
+      super(buildRuleParams);
+    }
+
+    @Override
+    public List<Step> getBuildSteps(BuildContext context, BuildableContext buildableContext)
+        throws IOException {
+      return ImmutableList.of();
     }
   }
 

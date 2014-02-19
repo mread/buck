@@ -49,6 +49,8 @@ import com.facebook.buck.rules.NoopArtifactCache;
 import com.facebook.buck.testutil.BuckTestConstant;
 import com.facebook.buck.testutil.RuleMap;
 import com.facebook.buck.testutil.TestConsole;
+import com.facebook.buck.util.AndroidDirectoryResolver;
+import com.facebook.buck.util.FakeAndroidDirectoryResolver;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.environment.Platform;
 import com.fasterxml.jackson.core.JsonFactory;
@@ -111,6 +113,7 @@ public class TargetsCommandTest {
   public void setUp() {
     console = new TestConsole();
     ProjectFilesystem projectFilesystem = new ProjectFilesystem(projectRoot);
+    AndroidDirectoryResolver androidDirectoryResolver = new FakeAndroidDirectoryResolver();
     KnownBuildRuleTypes buildRuleTypes = KnownBuildRuleTypes.getDefault();
     ArtifactCache artifactCache = new NoopArtifactCache();
     BuckEventBus eventBus = BuckEventBusFactory.newInstance();
@@ -118,6 +121,7 @@ public class TargetsCommandTest {
         new TargetsCommand(new CommandRunnerParams(
             console,
             projectFilesystem,
+            androidDirectoryResolver,
             buildRuleTypes,
             new InstanceArtifactCacheFactory(artifactCache),
             eventBus,
@@ -159,7 +163,7 @@ public class TargetsCommandTest {
     // run `buck targets` on the build file and parse the observed JSON.
     SortedMap<String, BuildRule> buildRules = buildBuildTargets(outputFile, "test-library");
 
-    targetsCommand.printTargetsList(buildRules, /* showOutput */ false);
+    targetsCommand.printTargetsList(buildRules, /* showOutput */ false, /* showRuleKey */ false);
     String observedOutput = console.getTextWrittenToStdOut();
 
     assertEquals("Output from targets command should match expected output.",
@@ -179,7 +183,7 @@ public class TargetsCommandTest {
         outputFile,
         "test-library");
 
-    targetsCommand.printTargetsList(buildRules, /* showOutput */ true);
+    targetsCommand.printTargetsList(buildRules, /* showOutput */ true, /* showRuleKey */ false);
     String observedOutput = console.getTextWrittenToStdOut();
 
     assertEquals("Output from targets command should match expected output.",

@@ -633,9 +633,59 @@ public class BuckConfig {
     return Optional.absent();
   }
 
+  @VisibleForTesting
+  void validateNdkVersion(Path ndkPath, String ndkVersion) {
+    Optional<String> minVersion = getMinimumNdkVersion();
+    Optional<String> maxVersion = getMaximumNdkVersion();
+
+    if (minVersion.isPresent() && maxVersion.isPresent()) {
+      // Example forms: r8, r8b, r9
+      if (ndkVersion.length() < 2) {
+        throw new HumanReadableException("Invalid NDK version: %s", ndkVersion);
+      }
+
+      if (ndkVersion.compareTo(minVersion.get()) < 0 || ndkVersion.compareTo(maxVersion.get()) > 0) {
+        throw new HumanReadableException(
+            "Supported NDK versions are between %s and %s but Buck is configured to use %s from %s",
+            minVersion.get(),
+            maxVersion.get(),
+            ndkVersion,
+            ndkPath.toAbsolutePath());
+      }
+    } else if (minVersion.isPresent() || maxVersion.isPresent()) {
+      throw new HumanReadableException(
+          "Either both min_version and max_version are provided or neither are");
+    }
+  }
+
   public Optional<String> getValue(String sectionName, String propertyName) {
     ImmutableMap<String, String> properties = this.getEntriesForSection(sectionName);
     return Optional.fromNullable(properties.get(propertyName));
+  }
+
+
+  public boolean getBooleanValue(String sectionName, String propertyName, boolean defaultValue) {
+    Map<String, String> entries = getEntriesForSection(sectionName);
+    if (!entries.containsKey(propertyName)) {
+      return defaultValue;
+    }
+
+    String answer = entries.get(propertyName);
+    switch (answer.toLowerCase()) {
+      case "yes":
+      case "true":
+        return true;
+
+      case "no":
+      case "false":
+        return false;
+
+      default:
+        throw new HumanReadableException(
+            "Unknown value for %s in [%s]: %s; should be yes/no true/false!",
+            propertyName,
+            sectionName);
+    }
   }
 
   @Override

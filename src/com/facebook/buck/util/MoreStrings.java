@@ -17,8 +17,12 @@
 package com.facebook.buck.util;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.base.Strings;
 
 import java.util.Random;
+
+import javax.annotation.Nullable;
 
 public final class MoreStrings {
 
@@ -28,6 +32,14 @@ public final class MoreStrings {
   private static int LENGTH_OF_RANDOM_STRING = 8;
 
   private static Random insecureRandom = new Random();
+
+  public static final Predicate<String> NON_EMPTY =
+      new Predicate<String>() {
+        @Override
+        public boolean apply(@Nullable String input) {
+          return !Strings.isNullOrEmpty(input);
+        }
+      };
 
   /** Utility class: do not instantiate. */
   private MoreStrings() {}
@@ -71,13 +83,13 @@ public final class MoreStrings {
           if (arr1[i - 1] == arr2[j - 1]) {
             levenshteinDist[i][j] = levenshteinDist[i - 1][j - 1];
           } else {
-            levenshteinDist[i][j] = 
+            levenshteinDist[i][j] =
               Math.min(levenshteinDist[i - 1][j] + 1,
                   Math.min(levenshteinDist[i][j - 1] + 1, levenshteinDist[i - 1][j - 1] + 1));
           }
         }
       }
-      
+
       return levenshteinDist[arr1.length][arr2.length];
     }
 

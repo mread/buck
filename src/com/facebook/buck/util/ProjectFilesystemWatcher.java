@@ -21,6 +21,7 @@ import java.io.IOException;
 /**
  * Watches a ProjectFilesystem for file changes using a given WatchService.
  * Change events are posted to a given EventBus when postEvents is called.
+ * Paths in Event contexts are always relative to the project root.
  */
 public interface ProjectFilesystemWatcher {
 

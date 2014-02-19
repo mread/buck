@@ -23,11 +23,21 @@ import com.facebook.buck.parser.NoSuchBuildTargetException;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
 import com.google.common.base.Optional;
 
+import java.nio.file.Path;
+
 public class AndroidLibraryBuildRuleFactory extends JavaLibraryBuildRuleFactory {
+
+  public AndroidLibraryBuildRuleFactory() {
+    super();
+  }
+
+  public AndroidLibraryBuildRuleFactory(Optional<Path> javac, Optional<String> javacVersion) {
+    super(javac, javacVersion);
+  }
 
   @Override
   public AndroidLibraryRule.Builder newBuilder(AbstractBuildRuleBuilderParams params) {
-    return AndroidLibraryRule.newAndroidLibraryRuleBuilder(params);
+    return AndroidLibraryRule.newAndroidLibraryRuleBuilder(getJavac(), getJavacVersion(), params);
   }
 
   @Override

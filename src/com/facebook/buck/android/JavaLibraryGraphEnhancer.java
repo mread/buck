@@ -58,15 +58,11 @@ public class JavaLibraryGraphEnhancer {
       return new Result(originalBuildRuleParams, Optional.<DummyRDotJava>absent());
     }
 
-    DummyRDotJava.Builder ruleBuilder =
-        DummyRDotJava.newDummyRDotJavaBuildableBuilder(buildRuleBuilderParams)
+    BuildRule dummyRDotJavaBuildRule = ruleResolver.buildAndAddToIndex(
+        DummyRDotJava
+            .newDummyRDotJavaBuildableBuilder(buildRuleBuilderParams)
             .setBuildTarget(dummyRDotJavaBuildTarget)
-            .setAndroidResourceDeps(androidResourceDeps);
-    for (HasAndroidResourceDeps resourceDep : androidResourceDeps) {
-      ruleBuilder.addDep(resourceDep.getBuildTarget());
-    }
-
-    BuildRule dummyRDotJavaBuildRule = ruleResolver.buildAndAddToIndex(ruleBuilder);
+            .setAndroidResourceDeps(androidResourceDeps));
     final DummyRDotJava dummyRDotJava = (DummyRDotJava) dummyRDotJavaBuildRule.getBuildable();
 
     ImmutableSortedSet<BuildRule> totalDeps = ImmutableSortedSet.<BuildRule>naturalOrder()
@@ -74,12 +70,7 @@ public class JavaLibraryGraphEnhancer {
         .add(dummyRDotJavaBuildRule)
         .build();
 
-    BuildRuleParams newBuildRuleParams = new BuildRuleParams(
-        originalBuildRuleParams.getBuildTarget(),
-        totalDeps,
-        originalBuildRuleParams.getVisibilityPatterns(),
-        originalBuildRuleParams.getPathRelativizer(),
-        originalBuildRuleParams.getRuleKeyBuilderFactory());
+    BuildRuleParams newBuildRuleParams = originalBuildRuleParams.copyWithChangedDeps(totalDeps);
 
     return new Result(newBuildRuleParams, Optional.of(dummyRDotJava));
   }

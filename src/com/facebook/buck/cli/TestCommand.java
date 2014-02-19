@@ -318,6 +318,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     Build build = options.createBuild(options.getBuckConfig(),
         graph,
         getProjectFilesystem(),
+        getAndroidDirectoryResolver(),
         artifactCache,
         console,
         getBuckEventBus(),
@@ -477,7 +478,11 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
 
       // Determine whether the test needs to be executed.
       boolean isTestRunRequired =
-          isTestRunRequiredForTest(test, executionContext, testRuleKeyFileHelper,
+          isTestRunRequiredForTest(
+              test,
+              executionContext,
+              testRuleKeyFileHelper,
+              options.isResultsCacheEnabled(),
               options.getTestSelectorListOptional().isPresent());
       if (isTestRunRequired) {
         getBuckEventBus().post(IndividualTestEvent.started(
@@ -628,6 +633,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       TestRule test,
       ExecutionContext executionContext,
       TestRuleKeyFileHelper testRuleKeyFileHelper,
+      boolean isResultsCacheEnabled,
       boolean isRunningWithTestSelectors)
       throws IOException {
     boolean isTestRunRequired;
@@ -643,6 +649,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
       isTestRunRequired = true;
     } else if (((successType = test.getBuildResultType()) != null)
                && successType == BuildRuleSuccess.Type.MATCHING_RULE_KEY
+               && isResultsCacheEnabled
                && test.hasTestResultFiles(executionContext)
                && testRuleKeyFileHelper.isRuleKeyInDir(test)) {
       // If this build rule's artifacts (which includes the rule's output and its test result
