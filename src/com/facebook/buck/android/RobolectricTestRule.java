@@ -90,7 +90,8 @@ public class RobolectricTestRule extends JavaTestRule {
         additionalClasspathEntries,
         javacOptions,
         vmArgs,
-        sourceUnderTest);
+        sourceUnderTest,
+        null);
     this.optionalDummyRDotJava = Preconditions.checkNotNull(optionalDummyRDotJava);
   }
 
