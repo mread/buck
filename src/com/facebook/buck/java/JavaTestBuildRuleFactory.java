@@ -65,5 +65,11 @@ public class JavaTestBuildRuleFactory extends AbstractTestRuleFactory<JavaTestRu
     // contacts
     List<String> contacts = params.getOptionalListAttribute("contacts");
     builder.setContacts(ImmutableSet.copyOf(contacts));
+
+    // use module root as working directory when running tests
+    if (params.getBooleanAttribute("run_from_module_root")) {
+      builder.setRunFrom(params.getRequiredStringAttribute("buck.base_path"));
+    }
+
   }
 }

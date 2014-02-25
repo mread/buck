@@ -20,7 +20,6 @@ import static com.facebook.buck.rules.BuildableProperties.Kind.ANDROID;
 
 import com.facebook.buck.android.DummyRDotJava;
 import com.facebook.buck.android.JavaLibraryGraphEnhancer;
-import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.rules.AbstractBuildRuleBuilderParams;
 import com.facebook.buck.rules.BuildContext;
@@ -39,17 +38,20 @@ import com.facebook.buck.step.fs.MakeCleanDirectoryStep;
 import com.facebook.buck.test.TestCaseSummary;
 import com.facebook.buck.test.TestResults;
 import com.facebook.buck.test.XmlTestResultParser;
+import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.util.BuckConstant;
 import com.facebook.buck.util.HumanReadableException;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.ZipFileTraversal;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -74,13 +76,16 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
    */
   private final ImmutableSet<BuildRule> sourceUnderTest;
 
+  private final Optional<Path> runFrom;
+
   private CompiledClassFileFinder compiledClassFileFinder;
 
   private final ImmutableSet<String> labels;
 
   private final ImmutableSet<String> contacts;
 
-  protected JavaTestRule(BuildRuleParams buildRuleParams,
+  protected JavaTestRule(
+      BuildRuleParams buildRuleParams,
       Set<Path> srcs,
       Set<SourcePath> resources,
       Optional<DummyRDotJava> optionalDummyRDotJava,
@@ -89,7 +94,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
       Optional<Path> proguardConfig,
       JavacOptions javacOptions,
       List<String> vmArgs,
-      ImmutableSet<BuildRule> sourceUnderTest) {
+      ImmutableSet<BuildRule> sourceUnderTest,
+      Path runFrom) {
     super(buildRuleParams,
         srcs,
         resources,
@@ -101,6 +107,7 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
     this.sourceUnderTest = Preconditions.checkNotNull(sourceUnderTest);
     this.labels = ImmutableSet.copyOf(labels);
     this.contacts = ImmutableSet.copyOf(contacts);
+    this.runFrom = Optional.fromNullable(runFrom);
   }
 
   @Override
@@ -179,11 +186,22 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
       classpathEntries = ImmutableSet.copyOf(getTransitiveClasspathEntries().values());
     }
 
+    Function<String, String> relativise = new Function<String, String>() {
+      @Nullable
+      @Override
+      public String apply(@Nullable String input) {
+        return runFrom.isPresent() ? runFrom.get().relativize(Paths.get(input)).toString() : input;
+      }
+    };
+
+    ImmutableSet<String> transformedClasspathEntries = ImmutableSet.copyOf(Iterables.transform(classpathEntries, relativise));
+
     Step junit = new JUnitStep(
-        classpathEntries,
+        transformedClasspathEntries,
         testClassNames,
         amendVmArgs(vmArgs, executionContext.getTargetDeviceOptional()),
-        pathToTestOutput.toString(),
+        runFrom,
+        runFrom.isPresent() ? relativise.apply(pathToTestOutput.toString()) : pathToTestOutput.toString(),
         executionContext.isCodeCoverageEnabled(),
         executionContext.isJacocoEnabled(),
         executionContext.isDebugEnabled(),
@@ -410,6 +428,7 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
     protected ImmutableSet<BuildTarget> sourcesUnderTest = ImmutableSet.of();
     protected ImmutableSet<String> labels = ImmutableSet.of();
     protected ImmutableSet<String> contacts = ImmutableSet.of();
+    protected Path runFrom;
 
     protected Builder(AbstractBuildRuleBuilderParams params) {
       super(params);
@@ -438,7 +457,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
           proguardConfig,
           javacOptions.build(),
           vmArgs,
-          sourceUnderTest);
+          sourceUnderTest,
+          runFrom);
     }
 
     @Override
@@ -466,6 +486,11 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
 
     public Builder setSourceUnderTest(ImmutableSet<BuildTarget> sourceUnderTestNames) {
       this.sourcesUnderTest = sourceUnderTestNames;
+      return this;
+    }
+
+    public Builder setRunFrom(String basePath) {
+      this.runFrom = Paths.get(basePath);
       return this;
     }
 

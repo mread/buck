@@ -16,9 +16,9 @@
 
 package com.facebook.buck.java;
 
-import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.shell.ShellStep;
 import com.facebook.buck.step.ExecutionContext;
+import com.facebook.buck.test.selectors.TestSelectorList;
 import com.facebook.buck.util.AndroidPlatformTarget;
 import com.facebook.buck.util.BuckConstant;
 import com.google.common.annotations.VisibleForTesting;
@@ -102,6 +102,7 @@ public class JUnitStep extends ShellStep {
     this(classpathEntries,
         testClassNames,
         vmArgs,
+        null,
         directoryForTestResults,
         isCodeCoverageEnabled,
         isJacocoEnabled,
@@ -111,17 +112,44 @@ public class JUnitStep extends ShellStep {
             new File("build/testrunner/classes").getAbsolutePath()));
   }
 
+  JUnitStep(
+      ImmutableSet<String> classpathEntries,
+      Set<String> testClassNames,
+      List<String> vmArgs,
+      Optional<Path> runFrom,
+      String directoryForTestResults,
+      boolean isCodeCoverageEnabled,
+      boolean isJacocoEnabled,
+      boolean isDebugEnabled,
+      Optional<TestSelectorList> testSelectorListOptional) {
+    this(
+        classpathEntries,
+        testClassNames,
+        vmArgs,
+        runFrom.isPresent() ? runFrom.get().toFile() : null,
+        directoryForTestResults,
+        isCodeCoverageEnabled,
+        isJacocoEnabled,
+        isDebugEnabled,
+        testSelectorListOptional,
+        System.getProperty(
+            "buck.testrunner_classes",
+            new File("build/testrunner/classes").getAbsolutePath()));
+  }
+
   @VisibleForTesting
   JUnitStep(
       Set<String> classpathEntries,
       Set<String> testClassNames,
       List<String> vmArgs,
+      File runFrom,
       String directoryForTestResults,
       boolean isCodeCoverageEnabled,
       boolean isJacocoEnabled,
       boolean isDebugEnabled,
       Optional<TestSelectorList> testSelectorListOptional,
       String testRunnerClassesDirectory) {
+    super(runFrom);
     this.classpathEntries = ImmutableSet.copyOf(classpathEntries);
     this.testClassNames = ImmutableSet.copyOf(testClassNames);
     this.vmArgs = ImmutableList.copyOf(vmArgs);
@@ -132,6 +160,8 @@ public class JUnitStep extends ShellStep {
     this.testSelectorListOptional = testSelectorListOptional;
     this.testRunnerClassesDirectory = Preconditions.checkNotNull(testRunnerClassesDirectory);
   }
+
+
 
   @Override
   public String getShortName() {

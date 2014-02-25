@@ -86,7 +86,8 @@ public class RobolectricTestRule extends JavaTestRule {
         proguardConfig,
         javacOptions,
         vmArgs,
-        sourceUnderTest);
+        sourceUnderTest,
+        null);
   }
 
   @Override
