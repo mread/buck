@@ -70,11 +70,12 @@ public class JarDirectoryStepTest {
     assertEquals(0, returnCode);
 
     File zip = new File(folder.getRoot(), "output.jar");
+    System.out.println(zip.getCanonicalPath());
     assertTrue(zip.exists());
 
-    // 4 files, 1 directory and the MANIFEST.MF.
-    assertZipFileCountIs(6, zip);
-    assertZipContains(zip, "file1", "file2", "dir2", "dir2/file3", "dir2/file4");
+    // 4 files and the MANIFEST.MF.
+    assertZipContains(zip, "file1", "file2", "dir2/file3", "dir2/file4");
+    assertZipFileCountIs(5, zip);
   }
 
   @Test
