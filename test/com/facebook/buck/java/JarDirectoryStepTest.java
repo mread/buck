@@ -37,6 +37,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Set;
 import java.util.jar.Manifest;
@@ -44,7 +45,37 @@ import java.util.zip.ZipEntry;
 
 public class JarDirectoryStepTest {
 
-  @Rule public TemporaryFolder folder = new TemporaryFolder();
+  @Rule
+  public TemporaryFolder folder = new TemporaryFolder();
+
+  @Test
+  public void shouldPutEntriesInForDirectories() throws IOException {
+
+    folder.newFolder("subdir");
+    folder.newFile("subdir/file1");
+    folder.newFile("subdir/file2");
+    folder.newFolder("subdir/dir2");
+    folder.newFile("subdir/dir2/file3");
+    folder.newFile("subdir/dir2/file4");
+
+    ImmutableSet<Path> files = ImmutableSet.of(Paths.get("subdir"));
+
+    JarDirectoryStep step = new JarDirectoryStep(Paths.get("output.jar"), files, null, null);
+    ExecutionContext context = TestExecutionContext.newBuilder()
+        .setProjectFilesystem(new ProjectFilesystem(folder.getRoot()))
+        .build();
+
+    int returnCode = step.execute(context);
+
+    assertEquals(0, returnCode);
+
+    File zip = new File(folder.getRoot(), "output.jar");
+    assertTrue(zip.exists());
+
+    // 4 files, 1 directory and the MANIFEST.MF.
+    assertZipFileCountIs(6, zip);
+    assertZipContains(zip, "file1", "file2", "dir2", "dir2/file3", "dir2/file4");
+  }
 
   @Test
   public void shouldNotThrowAnExceptionWhenAddingDuplicateEntries() throws IOException {
@@ -53,7 +84,8 @@ public class JarDirectoryStepTest {
     File first = createZip(new File(zipup, "a.zip"), "example.txt");
     File second = createZip(new File(zipup, "b.zip"), "example.txt");
 
-    JarDirectoryStep step = new JarDirectoryStep(Paths.get("output.jar"),
+    JarDirectoryStep step = new JarDirectoryStep(
+        Paths.get("output.jar"),
         ImmutableSet.of(Paths.get(first.getName()), Paths.get(second.getName())),
         "com.example.Main",
         /* manifest file */ null);
@@ -80,7 +112,8 @@ public class JarDirectoryStepTest {
     File first = createZip(new File(zipup, "first.zip"), "dir/example.txt", "dir/root1file.txt");
     File second = createZip(new File(zipup, "second.zip"), "dir/example.txt", "dir/root2file.txt");
 
-    JarDirectoryStep step = new JarDirectoryStep(Paths.get("output.jar"),
+    JarDirectoryStep step = new JarDirectoryStep(
+        Paths.get("output.jar"),
         ImmutableSet.of(Paths.get(first.getName()), Paths.get(second.getName())),
         "com.example.Main",
         /* manifest file */ null);
