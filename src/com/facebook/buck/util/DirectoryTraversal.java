@@ -36,15 +36,25 @@ public abstract class DirectoryTraversal {
 
   private final File root;
   private final ImmutableSet<Path> ignorePaths;
+  private final boolean includeDirectories;
 
   /** @param root must be a directory */
-  public DirectoryTraversal(File root, ImmutableSet<Path> ignorePaths) {
+  public DirectoryTraversal(File root, ImmutableSet<Path> ignorePaths, boolean includeDirectories) {
+    this.includeDirectories = includeDirectories;
     this.root = Preconditions.checkNotNull(root);
     this.ignorePaths = Preconditions.checkNotNull(ignorePaths);
   }
 
   public DirectoryTraversal(File root) {
-    this(root, ImmutableSet.<Path>of());
+    this(root, ImmutableSet.<Path>of(), false);
+  }
+
+  public DirectoryTraversal(File root, ImmutableSet<Path> ignorePaths) {
+      this(root, ignorePaths, false);
+  }
+
+  public DirectoryTraversal(File root, boolean includeDirectories) {
+    this(root, ImmutableSet.<Path>of(), includeDirectories);
   }
 
   public File getRoot() {
@@ -62,6 +72,10 @@ public abstract class DirectoryTraversal {
         if (ignorePaths.contains(rootPath.relativize(dir))) {
           return FileVisitResult.SKIP_SUBTREE;
         } else {
+          String relativePath = rootPath.relativize(dir).toString();
+          if (!relativePath.isEmpty() && includeDirectories) {
+            visit(dir.toFile(), relativePath);
+          }
           return FileVisitResult.CONTINUE;
         }
       }
