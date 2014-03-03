@@ -252,10 +252,12 @@ public class JarDirectoryStep implements Step {
       final CustomZipOutputStream jar,
       final Set<String> alreadyAddedEntries,
       final BuckEventBus eventBus) throws IOException {
-    new DirectoryTraversal(directory) {
 
+
+    new DirectoryTraversal(directory, true) {
       @Override
       public void visit(File file, String relativePath) {
+
         JarEntry entry = new JarEntry(relativePath);
         String entryName = entry.getName();
         entry.setTime(file.lastModified());
@@ -271,7 +273,9 @@ public class JarDirectoryStep implements Step {
               return;
           }
           jar.putNextEntry(entry);
-          Files.copy(file, jar);
+          if (file.isFile()) {
+            Files.copy(file, jar);
+          }
           jar.closeEntry();
         } catch (IOException e) {
           Throwables.propagate(e);
@@ -279,6 +283,8 @@ public class JarDirectoryStep implements Step {
       }
 
     }.traverse();
+
+
   }
 
   /**
