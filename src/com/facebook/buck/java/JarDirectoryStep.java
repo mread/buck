@@ -266,11 +266,12 @@ public class JarDirectoryStep implements Step {
           // those repeatedly would be lame, so don't do that.
           if (!isDuplicateAllowed(entryName) && !alreadyAddedEntries.add(entryName)) {
             if (!entryName.endsWith("/")) {
-              eventBus.post(LogEvent.create(
-                  determineSeverity(entry),
-                  "Duplicate found when adding directory to jar: %s", relativePath));
+              eventBus.post(
+                  LogEvent.create(
+                      determineSeverity(entry),
+                      "Duplicate found when adding directory to jar: %s", relativePath));
             }
-              return;
+            return;
           }
           jar.putNextEntry(entry);
           if (file.isFile()) {

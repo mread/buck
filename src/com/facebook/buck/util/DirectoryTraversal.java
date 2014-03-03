@@ -73,7 +73,7 @@ public abstract class DirectoryTraversal {
         } else {
           String relativePath = rootPath.relativize(dir).toString();
           if (!relativePath.isEmpty() && includeDirectories) {
-            visit(dir.toFile(), relativePath);
+            visit(dir.toFile(), relativePath + "/");
           }
           return FileVisitResult.CONTINUE;
         }
