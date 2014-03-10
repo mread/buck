@@ -93,7 +93,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
       List<String> vmArgs,
       ImmutableSet<BuildRule> sourceUnderTest,
       Path runFrom) {
-    super(buildRuleParams,
+    super(
+        buildRuleParams,
         srcs,
         resources,
         proguardConfig,
@@ -182,7 +183,10 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
       }
     };
 
-    ImmutableSet<String> transformedClasspathEntries = ImmutableSet.copyOf(Iterables.transform(classpathEntries, relativise));
+    ImmutableSet<String> transformedClasspathEntries = ImmutableSet.copyOf(
+        Iterables.transform(
+            classpathEntries,
+            relativise));
 
     Step junit = new JUnitStep(
         transformedClasspathEntries,
@@ -211,8 +215,9 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
    * Override this method if you need to amend vm args. Subclasses are required
    * to call super.onAmendVmArgs(...).
    */
-  protected void onAmendVmArgs(ImmutableList.Builder<String> vmArgsBuilder,
-                               Optional<TargetDevice> targetDevice) {
+  protected void onAmendVmArgs(
+      ImmutableList.Builder<String> vmArgsBuilder,
+      Optional<TargetDevice> targetDevice) {
     if (!targetDevice.isPresent()) {
       return;
     }
@@ -315,7 +320,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
     private final Set<String> classNamesForSources;
 
     CompiledClassFileFinder(JavaTestRule rule, ExecutionContext context) {
-      Preconditions.checkState(rule.isRuleBuilt(),
+      Preconditions.checkState(
+          rule.isRuleBuilt(),
           "Rule must be built so that the classes folder is available");
       Path outputPath;
       Path relativeOutputPath = rule.getPathToOutputFile();
@@ -336,10 +342,10 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
      * subfolder structure that matches the package structure of the input .java files. In general,
      * the .java files will be 1:1 with the .class files with two notable exceptions:
      * (1) There will be an additional .class file for each inner/anonymous class generated. These
-     *     types of classes are easy to identify because they will contain a '$' in the name.
+     * types of classes are easy to identify because they will contain a '$' in the name.
      * (2) A .java file that defines multiple top-level classes (yes, this can exist:
-     *     http://stackoverflow.com/questions/2336692/java-multiple-class-declarations-in-one-file)
-     *     will generate multiple .class files that do not have '$' in the name.
+     * http://stackoverflow.com/questions/2336692/java-multiple-class-declarations-in-one-file)
+     * will generate multiple .class files that do not have '$' in the name.
      * In this method, we perform a strict check for (1) and use a heuristic for (2). It is possible
      * to filter out the type (2) situation with a stricter check that aligns the package
      * directories of the .java files and the .class files, but it is a pain to implement.
@@ -412,7 +418,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
   public static class Builder extends DefaultJavaLibraryRule.Builder
       implements LabelsAttributeBuilder {
 
-    @Nullable protected List<String> vmArgs = ImmutableList.of();
+    @Nullable
+    protected List<String> vmArgs = ImmutableList.of();
     protected ImmutableSet<BuildTarget> sourcesUnderTest = ImmutableSet.of();
     protected ImmutableSet<Label> labels = ImmutableSet.of();
     protected ImmutableSet<String> contacts = ImmutableSet.of();
@@ -424,7 +431,8 @@ public class JavaTestRule extends DefaultJavaLibraryRule implements TestRule {
 
     @Override
     public JavaTestRule build(BuildRuleResolver ruleResolver) {
-      ImmutableSet<BuildRule> sourceUnderTest = generateSourceUnderTest(sourcesUnderTest,
+      ImmutableSet<BuildRule> sourceUnderTest = generateSourceUnderTest(
+          sourcesUnderTest,
           ruleResolver);
       AnnotationProcessingParams processingParams =
           getAnnotationProcessingBuilder().build(ruleResolver);
