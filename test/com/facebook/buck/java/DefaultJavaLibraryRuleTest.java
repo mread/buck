@@ -157,7 +157,7 @@ public class DefaultJavaLibraryRuleTest {
         /* exportedDeps */ ImmutableSortedSet.<BuildRule>of(),
         /* additionalClasspathEntries */ ImmutableSet.<String>of(),
         JavacOptions.DEFAULTS
-        );
+    );
 
     ImmutableList.Builder<Step> commands = ImmutableList.builder();
     JavaPackageFinder javaPackageFinder = createJavaPackageFinder();
@@ -171,9 +171,9 @@ public class DefaultJavaLibraryRuleTest {
             Paths.get("android/java/src/com/facebook/common/util/data.json"),
             BIN_PATH.resolve(
                 "android/java/lib__resources__classes/com/facebook/common/util/data.json")),
-          new MkdirAndSymlinkFileStep(
-              Paths.get("matt.json"),
-              BIN_PATH.resolve("/android/java/lib__resources__classes/matt.json"));
+        new MkdirAndSymlinkFileStep(
+            Paths.get("matt.json"),
+            BIN_PATH.resolve("android/java/lib__resources__classes/matt.json")));
     MoreAsserts.assertListEquals(expected, commands.build());
   }
 
