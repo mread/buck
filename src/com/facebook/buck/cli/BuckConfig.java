@@ -332,6 +332,24 @@ public class BuckConfig {
     return builder.build();
   }
 
+  public ImmutableSet<Path> getRelativeIgnorePaths() {
+    final ImmutableMap<String, String> projectConfig = getEntriesForSection("project");
+    final String ignoreKey = "ignore-relative";
+    ImmutableSet.Builder<Path> builder = ImmutableSet.builder();
+
+    if (projectConfig.containsKey(ignoreKey)) {
+      builder.addAll(MorePaths.asPaths(
+          Splitter.on(',')
+              .omitEmptyStrings()
+              .trimResults()
+              .split(projectConfig.get(ignoreKey))));
+    }
+
+    // Normalize paths in order to eliminate trailing '/' characters and whatnot.
+    return builder.build();
+  }
+
+
   public ImmutableSet<Pattern> getTempFilePatterns() {
     final ImmutableMap<String, String> projectConfig = getEntriesForSection("project");
     final String tempFilesKey = "temp_files";

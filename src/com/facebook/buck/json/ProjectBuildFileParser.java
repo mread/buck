@@ -77,6 +77,7 @@ public class ProjectBuildFileParser implements AutoCloseable {
 
   private final File projectRoot;
   private final ImmutableSet<Path> ignorePaths;
+  private final ImmutableSet<Path> relativeIgnorePaths;
   private final ImmutableSet<Description<?>> descriptions;
   private final ImmutableList<String> commonIncludes;
   private final String pythonInterpreter;
@@ -98,6 +99,7 @@ public class ProjectBuildFileParser implements AutoCloseable {
     this.projectRoot = projectFilesystem.getProjectRoot();
     this.descriptions = Preconditions.checkNotNull(descriptions);
     this.ignorePaths = projectFilesystem.getIgnorePaths();
+    this.relativeIgnorePaths = projectFilesystem.getRelativeIgnorePaths();
     this.commonIncludes = ImmutableList.copyOf(commonIncludes);
     this.pythonInterpreter = Preconditions.checkNotNull(pythonInterpreter);
     this.parseOptions = parseOptions;
@@ -199,6 +201,11 @@ public class ProjectBuildFileParser implements AutoCloseable {
 
     for (Path path : ignorePaths) {
       argBuilder.add("--ignore_path");
+      argBuilder.add(path.toString());
+    }
+
+    for(Path path : relativeIgnorePaths) {
+      argBuilder.add("--relative_ignore_path");
       argBuilder.add(path.toString());
     }
 

@@ -89,6 +89,7 @@ public class ProjectFilesystem {
   private final Function<Path, Path> pathAbsolutifier;
 
   private final ImmutableSet<Path> ignorePaths;
+  private final ImmutableSet<Path> relativeIgnorePaths;
 
   /**
    * There should only be one {@link ProjectFilesystem} created per process.
@@ -98,7 +99,7 @@ public class ProjectFilesystem {
    * a mock filesystem via EasyMock instead. Note that there are cases (such as integration tests)
    * where specifying {@code new File(".")} as the project root might be the appropriate thing.
    */
-  public ProjectFilesystem(Path projectRoot, ImmutableSet<Path> ignorePaths) {
+  public ProjectFilesystem(Path projectRoot, ImmutableSet<Path> ignorePaths, ImmutableSet<Path> relativeIgnorePaths) {
     Preconditions.checkArgument(java.nio.file.Files.isDirectory(projectRoot));
     this.projectRoot = projectRoot;
     this.pathAbsolutifier = new Function<Path, Path>() {
@@ -108,10 +109,11 @@ public class ProjectFilesystem {
       }
     };
     this.ignorePaths = MorePaths.filterForSubpaths(ignorePaths, this.projectRoot);
+    this.relativeIgnorePaths = relativeIgnorePaths;
   }
 
   public ProjectFilesystem(Path projectRoot) {
-    this(projectRoot, ImmutableSet.<Path>of());
+    this(projectRoot, ImmutableSet.<Path>of(), ImmutableSet.<Path>of());
   }
 
   /**
@@ -153,6 +155,10 @@ public class ProjectFilesystem {
    */
   public ImmutableSet<Path> getIgnorePaths() {
     return ignorePaths;
+  }
+
+  public ImmutableSet<Path> getRelativeIgnorePaths() {
+    return relativeIgnorePaths;
   }
 
   /**

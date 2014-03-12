@@ -404,9 +404,10 @@ public final class Main {
     // Create common command parameters. projectFilesystem initialization looks odd because it needs
     // ignorePaths from a BuckConfig instance, which in turn needs a ProjectFilesystem (i.e. this
     // solves a bootstrapping issue).
+    final BuckConfig buckConfig = createBuckConfig(new ProjectFilesystem(projectRoot), platform);
     ProjectFilesystem projectFilesystem = new ProjectFilesystem(
         Paths.get(projectRoot.getPath()),
-        createBuckConfig(new ProjectFilesystem(projectRoot), platform).getIgnorePaths());
+        buckConfig.getIgnorePaths(), buckConfig.getRelativeIgnorePaths());
     BuckConfig config = createBuckConfig(projectFilesystem, platform);
     Verbosity verbosity = VerbosityParser.parse(args);
     Optional<String> color;
