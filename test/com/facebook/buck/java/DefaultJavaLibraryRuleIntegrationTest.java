@@ -239,13 +239,14 @@ public class DefaultJavaLibraryRuleIntegrationTest {
       }
     }
 
-    // TODO(mread): Change the output to the intended output.
+    // if .buckconfig contains a src_roots of some_directory then files should appear
+    // as root entries
     assertEquals(
-        jarContents.build(),
         ImmutableSet.of(
-          "META-INF/MANIFEST.MF",
-          "some_directory/swag.txt",
-          "some_directory/yolo.txt"));
+            "META-INF/MANIFEST.MF",
+            "swag.txt",
+            "yolo.txt"),
+        jarContents.build());
 
     workspace.verify();
   }
