@@ -54,10 +54,10 @@ public class XmlTestResultParser {
     Document doc = XmlDomParser.parse(new InputSource(new StringReader(xml)),
         /* namespaceAware */ true);
     Element root = doc.getDocumentElement();
-    Preconditions.checkState("testcase".equals(root.getTagName()));
+    Preconditions.checkState("testsuite".equals(root.getTagName()));
     String testCaseName = root.getAttribute("name");
 
-    NodeList testElements = doc.getElementsByTagName("test");
+    NodeList testElements = doc.getElementsByTagName("testcase");
     List<TestResultSummary> testResults = Lists.newArrayListWithCapacity(testElements.getLength());
     for (int i = 0; i < testElements.getLength(); i++) {
       Element node = (Element) testElements.item(i);

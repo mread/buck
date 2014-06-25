@@ -298,12 +298,12 @@ public final class JUnitRunner {
     Document doc = docBuilder.newDocument();
     doc.setXmlVersion("1.1");
 
-    Element root = doc.createElement("testcase");
+    Element root = doc.createElement("testsuite");
     root.setAttribute("name", testClassName);
     doc.appendChild(root);
 
     for (TestResult result : results) {
-      Element test = doc.createElement("test");
+      Element test = doc.createElement("testcase");
 
       // name attribute
       test.setAttribute("name", result.testMethodName);
