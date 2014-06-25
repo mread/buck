@@ -218,6 +218,7 @@ public class JavaTest extends DefaultJavaLibrary implements DependencyEnhancer, 
         testClassNames,
         amendVmArgs(vmArgs, executionContext.getTargetDeviceOptional()),
         pathToTestOutput,
+        getBuildTarget().getBasePath(),
         tmpDirectory,
         executionContext.isCodeCoverageEnabled(),
         executionContext.isJacocoEnabled(),
@@ -338,7 +339,7 @@ public class JavaTest extends DefaultJavaLibrary implements DependencyEnhancer, 
           // ignore it.  This is another result of the fact that JUnit is the only thing that can
           // definitively say whether or not a class should be run.  It's not possible, for example,
           // to filter testClassNames here at the buck end.
-          if (!isUsingTestSelectors || testResultFile.isFile()) {
+          if (testResultFile.isFile()) {
             TestCaseSummary summary = XmlTestResultParser.parse(testResultFile);
             summaries.add(summary);
           }
