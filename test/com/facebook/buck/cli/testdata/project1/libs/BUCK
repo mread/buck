@@ -7,6 +7,12 @@ prebuilt_jar(
 )
 
 prebuilt_jar(
+	name='test',
+	binary_jar = ':guava',
+	visibility= ['PUBLIC']
+)
+
+prebuilt_jar(
   name = 'jsr305',
   binary_jar = 'jsr305.jar',
   visibility = [

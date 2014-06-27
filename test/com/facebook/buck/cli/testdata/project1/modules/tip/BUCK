@@ -2,6 +2,7 @@ android_library(
   name = 'tip',
   srcs = glob(['src/**/*.java']),
   deps = [
+    '//libs:test',
     '//libs:guava',
     '//libs:jsr305',
     '//modules/dep1:dep1',
