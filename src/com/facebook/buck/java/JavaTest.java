@@ -177,6 +177,7 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
         testClassNames,
         amendVmArgs(vmArgs, executionContext.getTargetDeviceOptional()),
         pathToTestOutput,
+        getBuildTarget().getBasePath(),
         tmpDirectory,
         executionContext.isCodeCoverageEnabled(),
         executionContext.isJacocoEnabled(),
