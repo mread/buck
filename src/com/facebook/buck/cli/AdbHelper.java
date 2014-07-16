@@ -28,7 +28,7 @@ import com.android.ddmlib.MultiLineReceiver;
 import com.android.ddmlib.ShellCommandUnresponsiveException;
 import com.android.ddmlib.TimeoutException;
 import com.facebook.buck.event.BuckEventBus;
-import com.facebook.buck.event.LogEvent;
+import com.facebook.buck.event.ConsoleEvent;
 import com.facebook.buck.event.TraceEventLogger;
 import com.facebook.buck.rules.InstallableApk;
 import com.facebook.buck.step.ExecutionContext;
@@ -508,7 +508,7 @@ public class AdbHelper {
       return false;
     }
 
-    getBuckEventBus().post(LogEvent.info("Installing apk on %s.", name));
+    getBuckEventBus().post(ConsoleEvent.info("Installing apk on %s.", name));
     try {
       String reason = null;
       if (installViaSd) {
@@ -648,7 +648,8 @@ public class AdbHelper {
 
     // Might need the package name and activities from the AndroidManifest.
     Path pathToManifest = installableApk.getManifestPath();
-    AndroidManifestReader reader = DefaultAndroidManifestReader.forPath(pathToManifest);
+    AndroidManifestReader reader = DefaultAndroidManifestReader.forPath(
+        pathToManifest, context.getProjectFilesystem());
 
     if (activity == null) {
       // Get list of activities that show up in the launcher.
@@ -828,7 +829,9 @@ public class AdbHelper {
     }
   }
 
-  public static String tryToExtractPackageNameFromManifest(InstallableApk androidBinaryRule) {
+  public static String tryToExtractPackageNameFromManifest(
+      InstallableApk androidBinaryRule,
+      ExecutionContext context) {
     Path pathToManifest = androidBinaryRule.getManifestPath();
 
     // Note that the file may not exist if AndroidManifest.xml is a generated file
@@ -840,7 +843,8 @@ public class AdbHelper {
     }
 
     try {
-      return DefaultAndroidManifestReader.forPath(pathToManifest).getPackage();
+      return DefaultAndroidManifestReader.forPath(pathToManifest, context.getProjectFilesystem())
+          .getPackage();
     } catch (IOException e) {
       throw new HumanReadableException("Could not extract package name from %s", pathToManifest);
     }

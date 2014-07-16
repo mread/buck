@@ -17,6 +17,7 @@
 package com.facebook.buck.cli;
 
 import com.facebook.buck.apple.XcodeProjectConfigDescription;
+import com.facebook.buck.apple.XcodeWorkspaceConfigDescription;
 import com.facebook.buck.apple.xcode.ProjectGenerator;
 import com.facebook.buck.apple.xcode.SeparatedProjectsGenerator;
 import com.facebook.buck.apple.xcode.WorkspaceAndProjectGenerator;
@@ -250,26 +251,30 @@ public class ProjectCommand extends AbstractCommandRunner<ProjectCommandOptions>
           optionsBuilder.addAll(ProjectGenerator.COMBINED_PROJECT_OPTIONS).build());
       projectGenerator.createXcodeProjects();
     } else if (options.getWorkspaceAndProjects()) {
+      ImmutableSet<BuildTarget> targets;
+      if (passedInTargetsSet.isEmpty()) {
+        targets = getAllTargetsOfType(
+            partialGraph.getActionGraph().getNodes(),
+            XcodeWorkspaceConfigDescription.TYPE);
+      } else {
+        targets = passedInTargetsSet;
+      }
       WorkspaceAndProjectGenerator generator = new WorkspaceAndProjectGenerator(
           getProjectFilesystem(),
           partialGraph,
           executionContext,
-          Iterables.getOnlyElement(passedInTargetsSet),
+          targets,
           optionsBuilder.build());
-      generator.generateWorkspaceAndDependentProjects();
+      generator.generateWorkspacesAndDependentProjects();
     } else {
       // Generate projects based on xcode_project_config rules, and place them in the same directory
       // as the Buck file.
 
       ImmutableSet<BuildTarget> targets;
       if (passedInTargetsSet.isEmpty()) {
-        ImmutableSet.Builder<BuildTarget> targetsBuilder = ImmutableSet.builder();
-        for (BuildRule node : partialGraph.getActionGraph().getNodes()) {
-          if (node.getType() == XcodeProjectConfigDescription.TYPE) {
-            targetsBuilder.add(node.getBuildTarget());
-          }
-        }
-        targets = targetsBuilder.build();
+        targets = getAllTargetsOfType(
+            partialGraph.getActionGraph().getNodes(),
+            XcodeProjectConfigDescription.TYPE);
       } else {
         targets = passedInTargetsSet;
       }
@@ -287,6 +292,18 @@ public class ProjectCommand extends AbstractCommandRunner<ProjectCommandOptions>
     }
 
     return 0;
+  }
+
+  private static final ImmutableSet<BuildTarget> getAllTargetsOfType(
+      Iterable<BuildRule> nodes,
+      BuildRuleType type) {
+    ImmutableSet.Builder<BuildTarget> targetsBuilder = ImmutableSet.builder();
+    for (BuildRule node : nodes) {
+      if (node.getType() == type) {
+        targetsBuilder.add(node.getBuildTarget());
+      }
+    }
+    return targetsBuilder.build();
   }
 
   /**

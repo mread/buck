@@ -18,17 +18,18 @@ package com.facebook.buck.cli;
 
 import com.facebook.buck.event.BuckEventBus;
 import com.facebook.buck.event.BuckEventListener;
-import com.facebook.buck.event.LogEvent;
+import com.facebook.buck.event.ConsoleEvent;
 import com.facebook.buck.event.listener.AbstractConsoleEventBusListener;
 import com.facebook.buck.event.listener.ChromeTraceBuildListener;
 import com.facebook.buck.event.listener.JavaUtilsLoggingBuildListener;
+import com.facebook.buck.event.listener.LoggingBuildListener;
 import com.facebook.buck.event.listener.SimpleConsoleEventBusListener;
 import com.facebook.buck.event.listener.SuperConsoleEventBusListener;
 import com.facebook.buck.httpserver.WebServer;
 import com.facebook.buck.java.JavaBuckConfig;
 import com.facebook.buck.java.JavaCompilerEnvironment;
+import com.facebook.buck.log.LogConfig;
 import com.facebook.buck.log.Logger;
-import com.facebook.buck.log.LogConfigFilesWatcher;
 import com.facebook.buck.model.BuildId;
 import com.facebook.buck.parser.Parser;
 import com.facebook.buck.rules.BuildRule;
@@ -52,7 +53,6 @@ import com.facebook.buck.util.ProcessExecutor;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.ProjectFilesystemWatcher;
 import com.facebook.buck.util.PropertyFinder;
-import com.facebook.buck.util.ShutdownException;
 import com.facebook.buck.util.Verbosity;
 import com.facebook.buck.util.WatchServiceWatcher;
 import com.facebook.buck.util.WatchmanWatcher;
@@ -148,7 +148,6 @@ public final class Main {
     private final BuckConfig config;
     private final Optional<WebServer> webServer;
     private final Console console;
-    private final LogConfigFilesWatcher logConfigFilesWatcher;
 
     public Daemon(
         ProjectFilesystem projectFilesystem,
@@ -173,13 +172,11 @@ public final class Main {
           config.getTempFilePatterns(),
           createRuleKeyBuilderFactory(hashCache));
       this.androidDirectoryResolver = Preconditions.checkNotNull(androidDirectoryResolver);
-      this.logConfigFilesWatcher = new LogConfigFilesWatcher();
 
       this.fileEventBus = new EventBus("file-change-events");
       this.filesystemWatcher = createWatcher(projectFilesystem);
       fileEventBus.register(parser);
       fileEventBus.register(hashCache);
-      fileEventBus.register(logConfigFilesWatcher);
       webServer = createWebServer(config, console, projectFilesystem);
       JavaUtilsLoggingBuildListener.ensureLogFileIsWritten(projectFilesystem);
     }
@@ -187,10 +184,12 @@ public final class Main {
     private ProjectFilesystemWatcher createWatcher(ProjectFilesystem projectFilesystem)
         throws IOException {
       if (System.getProperty("buck.buckd_watcher", "WatchService").equals("Watchman")) {
+        LOG.debug("Using watchman to watch for file changes.");
         return new WatchmanWatcher(
             projectFilesystem,
             fileEventBus);
       }
+      LOG.debug("Using java.nio.file.WatchService to watch for file changes.");
       return new WatchServiceWatcher(
           projectFilesystem,
           fileEventBus,
@@ -213,6 +212,7 @@ public final class Main {
         String rawPort = serverPort.get();
         try {
           int port = Integer.parseInt(rawPort, 10);
+          LOG.debug("Starting up web server on port %d.", port);
           webServer = Optional.of(new WebServer(port, projectFilesystem, STATIC_CONTENT_DIRECTORY));
         } catch (NumberFormatException e) {
           console.printErrorText(
@@ -248,6 +248,7 @@ public final class Main {
           // so needs to be left in a consistent state even if the current command is interrupted
           // due to a client disconnection.
           synchronized (parser) {
+            LOG.info("Client disconnected.");
             // Client should no longer be connected, but printing helps detect false disconnections.
             context.err.println("Client disconnected.");
             throw new InterruptedException("Client disconnected.");
@@ -323,6 +324,7 @@ public final class Main {
       Console console,
       ImmutableMap<String, String> environment) throws IOException {
     if (daemon == null) {
+      LOG.info("Starting up daemon for project root [%s]", filesystem.getProjectRoot());
       daemon = new Daemon(
           filesystem,
           knownBuildRuleTypes,
@@ -346,6 +348,7 @@ public final class Main {
       // create a new daemon.
       if (!daemon.getConfig().equals(config) ||
           !daemon.getAndroidDirectoryResolver().equals(androidDirectoryResolver)) {
+        LOG.info("Shutting down and restarting daemon on config or directory resolver change.");
         daemon.close();
         daemon = new Daemon(
             filesystem,
@@ -364,6 +367,7 @@ public final class Main {
   static void resetDaemon() {
     if (daemon != null) {
       try {
+        LOG.info("Closing daemon on reset request.");
         daemon.close();
       } catch (IOException e) {
         // Swallow exceptions while closing daemon.
@@ -530,7 +534,9 @@ public final class Main {
     // The order of resources in the try-with-resources block is important: the BuckEventBus must
     // be the last resource, so that it is closed first and can deliver its queued events to the
     // other resources before they are closed.
-    try (AbstractConsoleEventBusListener consoleListener =
+    try (ConsoleLogLevelOverrider consoleLogLevelOverrider =
+             new ConsoleLogLevelOverrider(verbosity);
+         AbstractConsoleEventBusListener consoleListener =
              createConsoleEventListener(clock, console, verbosity, executionEnvironment);
          BuckEventBus buildEventBus = new BuckEventBus(clock, buildId)) {
 
@@ -579,7 +585,7 @@ public final class Main {
               commandEvent,
               buildEventBus);
         } catch (WatchmanWatcherException | IOException e) {
-          buildEventBus.post(LogEvent.warning(
+          buildEventBus.post(ConsoleEvent.warning(
                   "Watchman threw an exception while parsing file changes.\n%s",
                   e.getMessage()));
         }
@@ -616,12 +622,13 @@ public final class Main {
       // If the Daemon is running and serving web traffic, print the URL to the Chrome Trace.
       if (webServer.isPresent()) {
         int port = webServer.get().getPort();
-        buildEventBus.post(LogEvent.info(
+        buildEventBus.post(ConsoleEvent.info(
             "See trace at http://localhost:%s/trace/%s", port, buildId));
       }
 
       buildEventBus.post(CommandEvent.finished(commandName, remainingArgs, isDaemon, exitCode));
     } catch (InterruptedException e) {
+      LOG.debug(e, "Failing build on interruption exception.");
       closeCreatedArtifactCaches(artifactCacheFactory); // Close cache before exit on exception.
       Thread.currentThread().interrupt();
       return FAIL_EXIT_CODE;
@@ -776,7 +783,8 @@ public final class Main {
         ImmutableList.<BuckEventListener>builder()
             .add(new JavaUtilsLoggingBuildListener())
             .add(new ChromeTraceBuildListener(projectFilesystem, config.getMaxTraces()))
-            .add(consoleEventBusListener);
+            .add(consoleEventBusListener)
+            .add(new LoggingBuildListener());
 
     if (webServer.isPresent()) {
       eventListenersBuilder.add(webServer.get().createListener());
@@ -867,6 +875,12 @@ public final class Main {
       throws IOException, InterruptedException {
     // TODO(user): enforce write command exclusion, but allow concurrent read only commands?
     try {
+      if (daemon != null) {
+        // Reset logging each time we run a command while daemonized.
+        LOG.debug("Rotating log.");
+        LogConfig.flushLogs();
+        LogConfig.setupLogging();
+      }
       LOG.debug("Starting up with args: %s", Arrays.toString(args));
       return runMainWithExitCode(projectRoot, context, args);
     } catch (HumanReadableException e) {
@@ -876,10 +890,6 @@ public final class Main {
           new Ansi(platform));
       console.printBuildFailure(e.getHumanReadableErrorMessage());
       return FAIL_EXIT_CODE;
-    } catch (ShutdownException e) {
-      stdErr.println(e);
-      e.printStackTrace(stdErr);
-      return 0;
     } finally {
       LOG.debug("Done.");
     }
