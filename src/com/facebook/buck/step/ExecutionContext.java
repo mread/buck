@@ -21,6 +21,7 @@ import com.facebook.buck.event.BuckEvent;
 import com.facebook.buck.event.BuckEventBus;
 import com.facebook.buck.event.ThrowableConsoleEvent;
 import com.facebook.buck.java.JavaPackageFinder;
+import com.facebook.buck.java.TestOutputFormat;
 import com.facebook.buck.util.AndroidPlatformTarget;
 import com.facebook.buck.util.Ansi;
 import com.facebook.buck.util.Console;
@@ -53,6 +54,7 @@ public class ExecutionContext {
   private final Platform platform;
   private final ImmutableMap<String, String> environment;
   private final JavaPackageFinder javaPackageFinder;
+  private final TestOutputFormat testOutputFormat;
 
   private ExecutionContext(
       ProjectFilesystem projectFilesystem,
@@ -66,7 +68,8 @@ public class ExecutionContext {
       BuckEventBus eventBus,
       Platform platform,
       ImmutableMap<String, String> environment,
-      JavaPackageFinder javaPackageFinder) {
+      JavaPackageFinder javaPackageFinder,
+      TestOutputFormat testOutputFormat) {
     this.verbosity = Preconditions.checkNotNull(console).getVerbosity();
     this.projectFilesystem = Preconditions.checkNotNull(projectFilesystem);
     this.console = Preconditions.checkNotNull(console);
@@ -81,6 +84,7 @@ public class ExecutionContext {
     this.platform = Preconditions.checkNotNull(platform);
     this.environment = Preconditions.checkNotNull(environment);
     this.javaPackageFinder = Preconditions.checkNotNull(javaPackageFinder);
+    this.testOutputFormat = Preconditions.checkNotNull(testOutputFormat);
   }
 
   /**
@@ -100,7 +104,7 @@ public class ExecutionContext {
         eventBus,
         platform,
         this.environment,
-        this.javaPackageFinder);
+        this.javaPackageFinder, testOutputFormat);
   }
 
   public void logError(Throwable error, String msg, Object... formatArgs) {
@@ -149,6 +153,10 @@ public class ExecutionContext {
 
   public JavaPackageFinder getJavaPackageFinder() {
     return javaPackageFinder;
+  }
+
+  public TestOutputFormat getTestOutputFormat() {
+    return testOutputFormat;
   }
 
   /**
@@ -228,6 +236,7 @@ public class ExecutionContext {
     @Nullable private Platform platform = null;
     @Nullable private ImmutableMap<String, String> environment = null;
     @Nullable private JavaPackageFinder javaPackageFinder = null;
+    private TestOutputFormat testOutputFormat = TestOutputFormat.BUCK;
 
     private Builder() {}
 
@@ -244,7 +253,8 @@ public class ExecutionContext {
           eventBus,
           platform,
           environment,
-          javaPackageFinder);
+          javaPackageFinder,
+          testOutputFormat);
     }
 
     public Builder setExecutionContext(ExecutionContext executionContext) {
@@ -260,6 +270,7 @@ public class ExecutionContext {
       setPlatform(executionContext.getPlatform());
       setEnvironment(executionContext.getEnvironment());
       setJavaPackageFinder(executionContext.getJavaPackageFinder());
+      setTestOutputFormat(executionContext.getTestOutputFormat());
       return this;
     }
 
@@ -323,6 +334,11 @@ public class ExecutionContext {
 
     public Builder setJavaPackageFinder(JavaPackageFinder javaPackageFinder) {
       this.javaPackageFinder = javaPackageFinder;
+      return this;
+    }
+
+    public Builder setTestOutputFormat(TestOutputFormat testOutputFormat) {
+      this.testOutputFormat = testOutputFormat;
       return this;
     }
   }

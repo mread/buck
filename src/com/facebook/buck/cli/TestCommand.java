@@ -151,6 +151,7 @@ public class TestCommand extends AbstractCommandRunner<TestCommandOptions> {
     ExecutionContext testExecutionContext = ExecutionContext.builder().
         setExecutionContext(buildExecutionContext).
         setTargetDevice(options.getTargetDeviceOptional()).
+        setTestOutputFormat(options.getTestOutputFormat()).
         build();
 
     try {
