@@ -30,10 +30,8 @@ import org.junit.runner.JUnitCore;
 import org.junit.runner.Request;
 import org.junit.runner.Runner;
 import org.junit.runner.manipulation.Filter;
-import org.junit.runner.notification.Failure;
 import org.junit.runners.model.RunnerBuilder;
 import org.w3c.dom.Document;
-import org.w3c.dom.Element;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -47,8 +45,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
@@ -69,6 +65,7 @@ public final class JUnitRunner {
   private static final String FILTER_DESCRIPTION = "TestSelectorList-filter";
 
   private final File outputDirectory;
+  private final TestResultFormatter testResultFormatter;
   private final List<String> testClassNames;
   private final long defaultTestTimeoutMillis;
   private final TestSelectorList testSelectorList;
@@ -77,11 +74,13 @@ public final class JUnitRunner {
 
   public JUnitRunner(
       File outputDirectory,
+      TestResultFormatter testResultFormatter,
       List<String> testClassNames,
       long defaultTestTimeoutMillis,
       TestSelectorList testSelectorList,
       boolean isDryRun) {
     this.outputDirectory = outputDirectory;
+    this.testResultFormatter = testResultFormatter;
     this.testClassNames = testClassNames;
     this.defaultTestTimeoutMillis = defaultTestTimeoutMillis;
     this.testSelectorList = testSelectorList;
@@ -102,10 +101,7 @@ public final class JUnitRunner {
           String className = description.getClassName();
           TestDescription testDescription = new TestDescription(className, methodName);
           if (testSelectorList.isIncluded(testDescription)) {
-            boolean isIgnored = description.getAnnotation(Ignore.class) != null;
-            if (!isIgnored) {
-              seenDescriptions.add(testDescription);
-            }
+            seenDescriptions.add(testDescription);
             return !isDryRun;
           } else {
             return false;
@@ -266,14 +262,13 @@ public final class JUnitRunner {
 
       @Override
       protected AnnotatedBuilder annotatedBuilder() {
-        // If there is no default timeout specified in .buckconfig, then use
-        // the original behavior of AllDefaultPossibilitiesBuilder.
+        // If there is no default timeout specified in .buckconfig, then use the original behavior
+        // of AllDefaultPossibilitiesBuilder.
         //
-        // Additionally, if we are using test selectors or doing a dry-run then
-        // we should use the original behavior to use our
-        // BuckBlockJUnit4ClassRunner, which provides the Descriptions needed
-        // to do test selecting properly.
-        if (defaultTestTimeoutMillis <= 0 || isDryRun || !testSelectorList.isEmpty()) {
+        // Additionally, if we are using test selectors then we should use the original behavior
+        // to use our BuckBlockJUnit4ClassRunner, which provides the Descriptions needed to do
+        // test selecting properly.
+        if (defaultTestTimeoutMillis <= 0 || !testSelectorList.isEmpty()) {
           return super.annotatedBuilder();
         }
 
@@ -295,60 +290,7 @@ public final class JUnitRunner {
    */
   private void writeResult(String testClassName, List<TestResult> results)
       throws IOException, ParserConfigurationException, TransformerException {
-    // XML writer logic taken from:
-    // http://www.genedavis.com/library/xml/java_dom_xml_creation.jsp
-
-    DocumentBuilder docBuilder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-    Document doc = docBuilder.newDocument();
-    doc.setXmlVersion("1.1");
-
-    Element root = doc.createElement("testcase");
-    root.setAttribute("name", testClassName);
-    doc.appendChild(root);
-
-    for (TestResult result : results) {
-      Element test = doc.createElement("test");
-
-      // name attribute
-      test.setAttribute("name", result.testMethodName);
-
-      // success attribute
-      boolean isSuccess = result.isSuccess();
-      test.setAttribute("success", Boolean.toString(isSuccess));
-
-      // type attribute
-      test.setAttribute("type", result.type.toString());
-
-      // time attribute
-      long runTime = result.runTime;
-      test.setAttribute("time", String.valueOf(runTime));
-
-      // Include failure details, if appropriate.
-      Failure failure = result.failure;
-      if (failure != null) {
-        String message = failure.getMessage();
-        test.setAttribute("message", message);
-
-        String stacktrace = failure.getTrace();
-        test.setAttribute("stacktrace", stacktrace);
-      }
-
-      // stdout, if non-empty.
-      if (result.stdOut != null) {
-        Element stdOutEl = doc.createElement("stdout");
-        stdOutEl.appendChild(doc.createTextNode(result.stdOut));
-        test.appendChild(stdOutEl);
-      }
-
-      // stderr, if non-empty.
-      if (result.stdErr != null) {
-        Element stdErrEl = doc.createElement("stderr");
-        stdErrEl.appendChild(doc.createTextNode(result.stdErr));
-        test.appendChild(stdErrEl);
-      }
-
-      root.appendChild(test);
-    }
+    Document doc = testResultFormatter.createResultDocument(testClassName, results);
 
     // Create an XML transformer that pretty-prints with a 2-space indent.
     TransformerFactory transformerFactory = TransformerFactory.newInstance();
@@ -377,6 +319,7 @@ public final class JUnitRunner {
    * Expected arguments are:
    * <ul>
    *   <li>(string) output directory
+   *   <li>(string) output format ('buck' or 'junit')
    *   <li>(long) default timeout in milliseconds (0 for no timeout)
    *   <li>(string) newline separated list of test selectors
    *   <li>(string...) fully-qualified names of test classes
@@ -388,12 +331,15 @@ public final class JUnitRunner {
       System.err.println("Must specify an output directory.");
       System.exit(1);
     } else if (args.length == 1) {
-      System.err.println("Must specify an output directory and a default timeout.");
+      System.err.println("Must specify an output directory and output format.");
       System.exit(1);
     } else if (args.length == 2) {
-      System.err.println("Must specify some test selectors (or empty string for no selectors).");
+      System.err.println("Must specify an output directory, output format and a default timeout.");
       System.exit(1);
     } else if (args.length == 3) {
+      System.err.println("Must specify some test selectors (or empty string for no selectors).");
+      System.exit(1);
+    } else if (args.length == 4) {
       System.err.println("Must specify at least one test.");
       System.exit(1);
     }
@@ -405,37 +351,49 @@ public final class JUnitRunner {
       System.exit(1);
     }
 
-    long defaultTestTimeoutMillis = Long.parseLong(args[1]);
+    String outputFormat = args[1];
+    TestResultFormatter testResultFormatter;
+    if ("buck".equals(outputFormat)) {
+      testResultFormatter = new BuckResultFormatter();
+    } else {
+      testResultFormatter = new JUnitResultFormatter();
+    }
+    long defaultTestTimeoutMillis = Long.parseLong(args[2]);
 
     TestSelectorList testSelectorList = TestSelectorList.empty();
-    if (!args[2].isEmpty()) {
-      List<String> rawSelectors = Arrays.asList(args[2].split("\n"));
+    if (!args[3].isEmpty()) {
+      List<String> rawSelectors = Arrays.asList(args[3].split("\n"));
       testSelectorList = TestSelectorList.builder()
           .addRawSelectors(rawSelectors)
           .build();
     }
 
-    boolean isDryRun = !args[3].isEmpty();
+    boolean isDryRun = !args[4].isEmpty();
 
     // Each subsequent argument should be a class name to run.
-    List<String> testClassNames = Arrays.asList(args).subList(4, args.length);
+    List<String> testClassNames = Arrays.asList(args).subList(5, args.length);
 
     // Run the tests.
-    new JUnitRunner(outputDirectory,
-        testClassNames,
-        defaultTestTimeoutMillis,
-        testSelectorList,
-        isDryRun)
-    .run();
+    try {
+      new JUnitRunner(
+          outputDirectory,
+          testResultFormatter,
+          testClassNames,
+          defaultTestTimeoutMillis,
+          testSelectorList,
+          isDryRun)
+          .run();
+    } finally {
+      // Explicitly exit to force the test runner to complete even if tests have sloppily left behind
+      // non-daemon threads that would have otherwise forced the process to wait and eventually
+      // timeout.
+      //
+      // Separately, we're using a successful exit code regardless of test outcome since JUnitRunner
+      // is designed to execute all tests and produce a report of success or failure.  We've done
+      // that successfully if we've gotten here.
+      System.exit(0);
+    }
 
-    // Explicitly exit to force the test runner to complete even if tests have sloppily left behind
-    // non-daemon threads that would have otherwise forced the process to wait and eventually
-    // timeout.
-    //
-    // Separately, we're using a successful exit code regardless of test outcome since JUnitRunner
-    // is designed to execute all tests and produce a report of success or failure.  We've done
-    // that successfully if we've gotten here.
-    System.exit(0);
   }
 
 }
