@@ -492,17 +492,19 @@ class BuckRepo:
         return self._compute_local_hash()
 
     def _get_java_args(self, version_uid):
+        git_revision = self._get_git_revision() if not self._buck_project.has_no_buck_check else 'unknown'
+        git_timestamp = self._get_git_commit_timestamp() if not self._buck_project.has_no_buck_check else '0'
+        git_is_dirty = self._is_dirty() if not self._buck_project.has_no_buck_check else False
         java_args = [
             "-XX:MaxPermSize=256m",
             "-Xmx1000m",
             "-Djava.awt.headless=true",
             "-Djava.util.logging.config.class=com.facebook.buck.log.LogConfig",
             "-Dbuck.test_util_no_tests_dir=true",
-            "-Dbuck.git_commit={}".format(self._get_git_revision()),
-            "-Dbuck.git_commit_timestamp={}".format(
-                self._get_git_commit_timestamp()),
+            "-Dbuck.git_commit={}".format(git_revision),
+            "-Dbuck.git_commit_timestamp={}".format(git_timestamp),
             "-Dbuck.version_uid={}".format(version_uid),
-            "-Dbuck.git_dirty={}".format(self._is_dirty()),
+            "-Dbuck.git_dirty={}".format(git_is_dirty),
             "-Dbuck.buckd_dir={}".format(self._buck_project.buckd_dir),
             "-Dlog4j.configuration=file:{}".format(
                 self._join_buck_dir("config/log4j.properties")),
