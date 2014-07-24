@@ -63,7 +63,7 @@ public class JUnitStep extends ShellStep {
   private final Set<String> testClassNames;
   private final List<String> vmArgs;
   private final Path directoryForTestResults;
-  private final String modulePath;
+  private final Path modulePath;
   private final Path tmpDirectory;
   private final Path testRunnerClassesDirectory;
   private final boolean isCodeCoverageEnabled;
@@ -103,7 +103,7 @@ public class JUnitStep extends ShellStep {
       Set<String> testClassNames,
       List<String> vmArgs,
       Path directoryForTestResults,
-      String modulePath,
+      Path modulePath,
       Path tmpDirectory,
       boolean isCodeCoverageEnabled,
       boolean isJacocoEnabled,
@@ -134,7 +134,7 @@ public class JUnitStep extends ShellStep {
       Set<String> testClassNames,
       List<String> vmArgs,
       Path directoryForTestResults,
-      String modulePath,
+      Path modulePath,
       Path tmpDirectory,
       boolean isCodeCoverageEnabled,
       boolean isJacocoEnabled,
