@@ -183,7 +183,8 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
         executionContext.isDebugEnabled(),
         executionContext.getBuckEventBus().getBuildId(),
         testSelectorList,
-        isDryRun);
+        isDryRun,
+        executionContext.getTestOutputFormat());
     steps.add(junit);
 
     return steps.build();
@@ -303,7 +304,8 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
           // definitively say whether or not a class should be run.  It's not possible, for example,
           // to filter testClassNames here at the buck end.
           if (!isUsingTestSelectors || testResultFile.isFile()) {
-            TestCaseSummary summary = XmlTestResultParser.parse(testResultFile);
+            TestCaseSummary summary = XmlTestResultParser.parse(testResultFile,
+                context.getTestOutputFormat());
             summaries.add(summary);
           }
         }

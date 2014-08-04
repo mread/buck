@@ -54,6 +54,7 @@ public class JUnitStep extends ShellStep {
   private final List<String> vmArgs;
   private final Path directoryForTestResults;
   private final Path modulePath;
+  private final TestOutputFormat testOutputFormat;
   private final Path tmpDirectory;
   private final Path testRunnerClassesDirectory;
   private final boolean isCodeCoverageEnabled;
@@ -85,6 +86,7 @@ public class JUnitStep extends ShellStep {
    * @param testClassNames the fully qualified names of the Java tests to run
    * @param directoryForTestResults directory where test results should be written
    * @param tmpDirectory directory tests can use for local file scratch space.
+   * @param testOutputFormat XML output format for each test: 'buck' or 'junit'
    */
   public JUnitStep(
       Set<Path> classpathEntries,
@@ -97,7 +99,8 @@ public class JUnitStep extends ShellStep {
       boolean isDebugEnabled,
       BuildId buildId,
       TestSelectorList testSelectorList,
-      boolean isDryRun) {
+      boolean isDryRun,
+      TestOutputFormat testOutputFormat) {
     this(classpathEntries,
         testClassNames,
         vmArgs,
@@ -111,7 +114,8 @@ public class JUnitStep extends ShellStep {
         isDryRun,
         Paths.get(System.getProperty(
                 "buck.testrunner_classes",
-                new File("build/testrunner/classes").getAbsolutePath())));
+                new File("build/testrunner/classes").getAbsolutePath())),
+        testOutputFormat);
   }
 
   @VisibleForTesting
@@ -127,12 +131,14 @@ public class JUnitStep extends ShellStep {
       BuildId buildId,
       TestSelectorList testSelectorList,
       boolean isDryRun,
-      Path testRunnerClassesDirectory) {
+      Path testRunnerClassesDirectory,
+      TestOutputFormat testOutputFormat) {
     this.classpathEntries = ImmutableSet.copyOf(classpathEntries);
     this.testClassNames = ImmutableSet.copyOf(testClassNames);
     this.vmArgs = ImmutableList.copyOf(vmArgs);
     this.modulePath = Preconditions.checkNotNull(modulePath);
     this.directoryForTestResults = Preconditions.checkNotNull(directoryForTestResults);
+    this.testOutputFormat = testOutputFormat;
     this.tmpDirectory = Preconditions.checkNotNull(tmpDirectory);
     this.isCodeCoverageEnabled = isCodeCoverageEnabled;
     this.isDebugEnabled = isDebugEnabled;
@@ -200,6 +206,9 @@ public class JUnitStep extends ShellStep {
     // reliable to write test results to stdout or stderr because there may be output from the unit
     // tests written to those file descriptors, as well.
     args.add(directoryForTestResults.toString());
+
+    // output format for each test
+    args.add(testOutputFormat.name().toLowerCase());
 
     // Add the default test timeout if --debug flag is not set
     long timeout = isDebugEnabled ? 0 : context.getDefaultTestTimeoutMillis();
