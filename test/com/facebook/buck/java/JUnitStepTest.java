@@ -57,7 +57,7 @@ public class JUnitStepTest {
     BuildId pretendBuildId = new BuildId("pretend-build-id");
     String buildIdArg = String.format("-D%s=%s", JUnitStep.BUILD_ID_PROPERTY, pretendBuildId);
 
-    String modulePath = "module/submodule";
+    Path modulePath = Paths.get("module/submodule");
     String modulePathArg = String.format("-D%s=%s", JUnitStep.MODULE_PATH_PROPERTY, modulePath);
 
     Path directoryForTestResults = Paths.get("buck-out/gen/theresults/");
@@ -126,7 +126,7 @@ public class JUnitStepTest {
     BuildId pretendBuildId = new BuildId("pretend-build-id");
     String buildIdArg = String.format("-D%s=%s", JUnitStep.BUILD_ID_PROPERTY, pretendBuildId);
 
-    String modulePath = "module/submodule";
+    Path modulePath = Paths.get("module/submodule");
     String modulePathArg = String.format("-D%s=%s", JUnitStep.MODULE_PATH_PROPERTY, modulePath);
 
     Path directoryForTestResults = Paths.get("buck-out/gen/theresults/");
