@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.facebook.buck.java.TestOutputFormat;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 
@@ -46,7 +47,7 @@ public class XmlTestResultParserTest {
     Files.write(xml, xmlFile, Charsets.UTF_8);
 
     try {
-      XmlTestResultParser.parse(xmlFile);
+      XmlTestResultParser.parse(xmlFile, TestOutputFormat.BUCK);
       fail("Should throw RuntimeException.");
     } catch (RuntimeException e) {
       assertTrue("The RuntimeException should wrap the NumberFormatException.",
