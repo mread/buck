@@ -18,6 +18,7 @@ package com.facebook.buck.cli;
 
 import com.facebook.buck.test.CoverageReportFormat;
 import com.facebook.buck.java.DefaultJavaPackageFinder;
+import com.facebook.buck.java.TestOutputFormat;
 import com.facebook.buck.rules.Label;
 import com.facebook.buck.step.TargetDevice;
 import com.facebook.buck.test.selectors.TestSelectorList;
@@ -52,6 +53,9 @@ public class TestCommandOptions extends BuildCommandOptions {
   @Option(name = "--xml", usage = "Where to write test output as XML.")
   @Nullable
   private String pathToXmlTestOutput = null;
+
+  @Option(name = "--format", usage = "Which format to write individual test results in: 'buck' (default) or 'junit'.")
+  private TestOutputFormat testOutputFormat = TestOutputFormat.BUCK;
 
   @Option(name = "--no-results-cache", usage = "Whether to use cached test results.")
   private boolean isResultsCacheDisabled = false;
@@ -103,6 +107,10 @@ public class TestCommandOptions extends BuildCommandOptions {
   @Nullable
   public String getPathToXmlTestOutput() {
     return pathToXmlTestOutput;
+  }
+
+  public TestOutputFormat getTestOutputFormat() {
+    return testOutputFormat;
   }
 
   public Optional<DefaultJavaPackageFinder> getJavaPackageFinder() {

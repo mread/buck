@@ -74,7 +74,8 @@ public class JUnitStepTest {
         pretendBuildId,
         TestSelectorList.empty(),
         /* isDryRun */ false,
-        testRunnerClassesDirectory);
+        testRunnerClassesDirectory,
+        TestOutputFormat.BUCK);
 
     ExecutionContext executionContext = EasyMock.createMock(ExecutionContext.class);
     EasyMock.expect(executionContext.getVerbosity()).andReturn(Verbosity.ALL);
@@ -138,8 +139,8 @@ public class JUnitStepTest {
         pretendBuildId,
         TestSelectorList.empty(),
         /* isDryRun */ false,
-        testRunnerClassesDirectory);
-
+        testRunnerClassesDirectory,
+        TestOutputFormat.BUCK);
 
     TestConsole console = new TestConsole();
     console.setVerbosity(Verbosity.ALL);
