@@ -170,9 +170,13 @@ class BuckRepo:
                           file=sys.stderr)
                 return exit_code
 
+        pathToIntellijPy = os.environ.get('PATH_TO_INTELLIJ_PY')
+
         command = ["java"]
         command.extend(self._get_java_args(self._buck_version_uid))
         command.append("-Djava.io.tmpdir={0}".format(self._tmp_dir))
+        if (pathToIntellijPy):
+            command.append("-Dbuck.path_to_intellij_py={}".format(pathToIntellijPy))
         command.append("-classpath")
         command.append(self._get_java_classpath())
         command.append("com.facebook.buck.cli.Main")
