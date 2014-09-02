@@ -36,6 +36,7 @@ import com.facebook.buck.util.BuckConstant;
 import com.facebook.buck.util.ProjectFilesystem;
 import com.facebook.buck.util.ZipFileTraversal;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -49,13 +50,12 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-
-import javax.annotation.Nullable;
 
 @SuppressWarnings("PMD.TestClassWithoutTestCases")
 public class JavaTest extends DefaultJavaLibrary implements TestRule {
@@ -200,8 +200,9 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
    * Override this method if you need to amend vm args. Subclasses are required
    * to call super.onAmendVmArgs(...).
    */
-  protected void onAmendVmArgs(ImmutableList.Builder<String> vmArgsBuilder,
-                               Optional<TargetDevice> targetDevice) {
+  protected void onAmendVmArgs(
+      ImmutableList.Builder<String> vmArgsBuilder,
+      Optional<TargetDevice> targetDevice) {
     if (!targetDevice.isPresent()) {
       return;
     }
@@ -326,14 +327,21 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
     private final Set<String> classNamesForSources;
 
     CompiledClassFileFinder(JavaTest rule, ExecutionContext context) {
-      Path outputPath;
       Path relativeOutputPath = rule.getPathToOutputFile();
+      List<Path> paths = new ArrayList<>();
+      final Function<Path, Path> absolutifier = context.getProjectFilesystem().getAbsolutifier();
       if (relativeOutputPath != null) {
-        outputPath = context.getProjectFilesystem().getAbsolutifier().apply(relativeOutputPath);
-      } else {
-        outputPath = null;
+        paths.add(absolutifier.apply(relativeOutputPath));
       }
-      classNamesForSources = getClassNamesForSources(rule.getJavaSrcs(), outputPath);
+      for (BuildRule dependency : rule.getDeps()) {
+        final Path pathToOutputFile = dependency.getPathToOutputFile();
+        if (pathToOutputFile != null && pathToOutputFile.endsWith(".jar")) {
+          paths.add(absolutifier.apply(pathToOutputFile));
+        }
+      }
+      classNamesForSources = getClassNamesForSources(
+          rule.getJavaSrcs(),
+          paths.toArray(new Path[paths.size()]));
     }
 
     public Set<String> getClassNamesForSources() {
@@ -345,21 +353,21 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
      * subfolder structure that matches the package structure of the input .java files. In general,
      * the .java files will be 1:1 with the .class files with two notable exceptions:
      * (1) There will be an additional .class file for each inner/anonymous class generated. These
-     *     types of classes are easy to identify because they will contain a '$' in the name.
+     * types of classes are easy to identify because they will contain a '$' in the name.
      * (2) A .java file that defines multiple top-level classes (yes, this can exist:
-     *     http://stackoverflow.com/questions/2336692/java-multiple-class-declarations-in-one-file)
-     *     will generate multiple .class files that do not have '$' in the name.
+     * http://stackoverflow.com/questions/2336692/java-multiple-class-declarations-in-one-file)
+     * will generate multiple .class files that do not have '$' in the name.
      * In this method, we perform a strict check for (1) and use a heuristic for (2). It is possible
      * to filter out the type (2) situation with a stricter check that aligns the package
      * directories of the .java files and the .class files, but it is a pain to implement.
      * If this heuristic turns out to be insufficient in practice, then we can fix it.
      *
-     * @param sources paths to .java source files that were passed to javac
-     * @param jarFile jar where the generated .class files were written
+     * @param sources  paths to .java source files that were passed to javac
+     * @param jarFiles jars where the generated .class files were written
      */
     @VisibleForTesting
-    static Set<String>  getClassNamesForSources(Set<SourcePath> sources, @Nullable Path jarFile) {
-      if (jarFile == null) {
+    static Set<String> getClassNamesForSources(Set<SourcePath> sources, Path... jarFiles) {
+      if (jarFiles == null || jarFiles.length == 0) {
         return ImmutableSet.of();
       }
 
@@ -371,47 +379,53 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
         if (lastSlashIndex >= 0) {
           source = source.substring(lastSlashIndex + 1);
         }
-        source = source.substring(0, source.length() - ".java".length());
+        source = removeSuffix(source);
         sourceClassNames.add(source);
       }
 
       final ImmutableSet.Builder<String> testClassNames = ImmutableSet.builder();
-      ZipFileTraversal traversal = new ZipFileTraversal(jarFile.toFile()) {
+      for (Path jarFile : jarFiles) {
+        ZipFileTraversal traversal = new ZipFileTraversal(jarFile.toFile()) {
 
-        @Override
-        public void visit(ZipFile zipFile, ZipEntry zipEntry) {
-          final String name = new File(zipEntry.getName()).getName();
+          @Override
+          public void visit(ZipFile zipFile, ZipEntry zipEntry) {
+            final String name = new File(zipEntry.getName()).getName();
 
-          // Ignore non-.class files.
-          if (!name.endsWith(".class")) {
-            return;
+            // Ignore non-.class files.
+            if (!name.endsWith(".class")) {
+              return;
+            }
+
+            // As a heuristic for case (2) as described in the Javadoc, make sure the name of the
+            // .class file matches the name of a .java file.
+            String nameWithoutDotClass = name.substring(0, name.length() - ".class".length());
+            if (!sourceClassNames.contains(nameWithoutDotClass)) {
+              return;
+            }
+
+            // Make sure it is a .class file that corresponds to a top-level .class file and not an
+            // inner class.
+            if (!name.contains("$")) {
+              String fullyQualifiedNameWithDotClassSuffix = zipEntry.getName().replace('/', '.');
+              String className = fullyQualifiedNameWithDotClassSuffix
+                  .substring(0, fullyQualifiedNameWithDotClassSuffix.length() - ".class".length());
+              testClassNames.add(className);
+            }
           }
-
-          // As a heuristic for case (2) as described in the Javadoc, make sure the name of the
-          // .class file matches the name of a .java file.
-          String nameWithoutDotClass = name.substring(0, name.length() - ".class".length());
-          if (!sourceClassNames.contains(nameWithoutDotClass)) {
-            return;
-          }
-
-          // Make sure it is a .class file that corresponds to a top-level .class file and not an
-          // inner class.
-          if (!name.contains("$")) {
-            String fullyQualifiedNameWithDotClassSuffix = zipEntry.getName().replace('/', '.');
-            String className = fullyQualifiedNameWithDotClassSuffix
-                .substring(0, fullyQualifiedNameWithDotClassSuffix.length() - ".class".length());
-            testClassNames.add(className);
-          }
+        };
+        try {
+          traversal.traverse();
+        } catch (IOException e) {
+          // There's nothing sane to do here. The jar file really should exist.
+          throw Throwables.propagate(e);
         }
-      };
-      try {
-        traversal.traverse();
-      } catch (IOException e) {
-        // There's nothing sane to do here. The jar file really should exist.
-        throw Throwables.propagate(e);
       }
 
       return testClassNames.build();
+    }
+
+    private static String removeSuffix(String source) {
+      return source.substring(0, source.lastIndexOf('.'));
     }
   }
 }
