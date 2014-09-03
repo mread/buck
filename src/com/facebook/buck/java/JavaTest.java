@@ -336,7 +336,7 @@ public class JavaTest extends DefaultJavaLibrary implements TestRule {
       }
       for (BuildRule dependency : rule.getDeps()) {
         final Path pathToOutputFile = dependency.getPathToOutputFile();
-        if (pathToOutputFile != null && pathToOutputFile.endsWith(".jar")) {
+        if (pathToOutputFile != null && pathToOutputFile.toString().endsWith(".jar")) {
           paths.add(absolutifier.apply(pathToOutputFile));
         }
       }
