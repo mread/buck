@@ -19,4 +19,5 @@ package com.facebook.buck.java;
 public enum TestType {
   JUNIT,
   TESTNG,
+  SPOCK
 }

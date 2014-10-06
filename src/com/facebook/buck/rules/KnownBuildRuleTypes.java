@@ -71,6 +71,8 @@ import com.facebook.buck.file.Downloader;
 import com.facebook.buck.file.ExplodingDownloader;
 import com.facebook.buck.file.HttpDownloader;
 import com.facebook.buck.file.RemoteFileDescription;
+import com.facebook.buck.groovy.GroovyLibraryDescription;
+import com.facebook.buck.groovy.GroovyTestDescription;
 import com.facebook.buck.gwt.GwtBinaryDescription;
 import com.facebook.buck.io.ExecutableFinder;
 import com.facebook.buck.io.ProjectFilesystem;
@@ -392,7 +394,8 @@ public class KnownBuildRuleTypes {
             ndkCxxPlatforms,
             dxExecutorService));
     builder.register(new AndroidBuildConfigDescription(androidBinaryOptions));
-    builder.register(new AndroidInstrumentationApkDescription(
+    builder.register(
+        new AndroidInstrumentationApkDescription(
             proGuardConfig,
             androidBinaryOptions,
             ndkCxxPlatforms,
@@ -467,7 +470,8 @@ public class KnownBuildRuleTypes {
             defaultCxxPlatform,
             cxxPlatforms));
     builder.register(new RemoteFileDescription(downloader));
-    builder.register(new RobolectricTestDescription(
+    builder.register(
+        new RobolectricTestDescription(
             androidBinaryOptions,
             testRuleTimeoutMs));
     builder.register(new ShBinaryDescription());
@@ -489,6 +493,8 @@ public class KnownBuildRuleTypes {
                 new ThriftPythonEnhancer(thriftBuckConfig, ThriftPythonEnhancer.Type.NORMAL),
                 new ThriftPythonEnhancer(thriftBuckConfig, ThriftPythonEnhancer.Type.TWISTED))));
     builder.register(new XcodeWorkspaceConfigDescription());
+    builder.register(new GroovyLibraryDescription());
+    builder.register(new GroovyTestDescription(testRuleTimeoutMs));
 
     return builder;
   }
