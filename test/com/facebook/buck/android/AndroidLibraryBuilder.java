@@ -51,7 +51,6 @@ public class AndroidLibraryBuilder extends AbstractBuilder<AndroidLibraryDescrip
   }
 
   public AndroidLibraryBuilder addDep(BuildTarget rule) {
-    arg.deps = amend(arg.deps, rule);
     return this;
   }
 

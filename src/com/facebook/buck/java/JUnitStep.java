@@ -44,6 +44,9 @@ public class JUnitStep extends ShellStep {
   @VisibleForTesting
   static final String TESTNG_TEST_RUNNER_CLASS_NAME =
       "com.facebook.buck.junit.TestNGMain";
+  @VisibleForTesting
+  static final String SPOCK_TEST_RUNNER_CLASS_NAME =
+      "com.facebook.buck.junit.SpockMain";
 
   @VisibleForTesting
   public static final String BUILD_ID_PROPERTY = "com.facebook.buck.buildId";
@@ -194,6 +197,8 @@ public class JUnitStep extends ShellStep {
       args.add(JUNIT_TEST_RUNNER_CLASS_NAME);
     } else if (TestType.TESTNG == type) {
       args.add(TESTNG_TEST_RUNNER_CLASS_NAME);
+    } else if (TestType.SPOCK == type) {
+      args.add(SPOCK_TEST_RUNNER_CLASS_NAME);
     } else {
       throw new IllegalArgumentException(
           "java_test: unrecognized type " + type + ", expected eg. junit or testng");

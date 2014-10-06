@@ -42,7 +42,8 @@ public class JavaLibraryRules {
   /** Utility class: do not instantiate. */
   private JavaLibraryRules() {}
 
-  static void addAccumulateClassNamesStep(JavaLibrary javaLibrary,
+  public static void addAccumulateClassNamesStep(
+      JavaLibrary javaLibrary,
       BuildableContext buildableContext,
       ImmutableList.Builder<Step> steps) {
     Preconditions.checkNotNull(javaLibrary);
@@ -56,7 +57,7 @@ public class JavaLibraryRules {
     buildableContext.recordArtifact(pathToClassHashes);
   }
 
-  static JavaLibrary.Data initializeFromDisk(
+  public static JavaLibrary.Data initializeFromDisk(
       BuildTarget buildTarget,
       OnDiskBuildInfo onDiskBuildInfo) {
     Optional<Sha1HashCode> abiKeyHash = onDiskBuildInfo.getHash(AbiRule.ABI_KEY_ON_DISK_METADATA);

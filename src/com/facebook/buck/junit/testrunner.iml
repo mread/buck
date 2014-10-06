@@ -14,6 +14,7 @@
     <orderEntry type="library" name="testng" level="project" />
     <orderEntry type="module" module-name="buck" />
     <orderEntry type="library" name="buck-lib" level="project" />
+    <orderEntry type="library" name="spock" level="project" />
   </component>
 </module>
 

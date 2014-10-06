@@ -37,7 +37,6 @@ public class JavaTestBuilder extends AbstractBuilder<JavaTestDescription.Arg> {
   }
 
   public JavaTestBuilder addDep(BuildTarget rule) {
-    arg.deps = amend(arg.deps, rule);
     return this;
   }
 

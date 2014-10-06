@@ -46,3 +46,18 @@ java_library(
   visibility = [
   ],
 )
+
+java_library(
+  name = 'spock',
+  srcs = [
+    'SpockMain.java',
+    'SpockRunner.java',
+  ],
+  deps = [
+    ':base',
+    '//third-party/java/spock:spock',
+  ],
+  visibility = [
+    '//test/com/facebook/buck/junit:junit'
+  ],
+)

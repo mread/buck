@@ -119,7 +119,6 @@ public class KnownBuildRuleTypesTest {
     arg.resourcesRoot = Optional.absent();
     arg.providedDeps = Optional.of(ImmutableSortedSet.<BuildTarget>of());
     arg.exportedDeps = Optional.of(ImmutableSortedSet.<BuildTarget>of());
-    arg.deps = Optional.of(ImmutableSortedSet.<BuildTarget>of());
   }
 
   private DefaultJavaLibrary createJavaLibrary(KnownBuildRuleTypes buildRuleTypes) {

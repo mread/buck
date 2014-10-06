@@ -35,7 +35,6 @@ public class JavaLibraryBuilder extends AbstractBuilder<JavaLibraryDescription.A
   }
 
   public JavaLibraryBuilder addDep(BuildTarget rule) {
-    arg.deps = amend(arg.deps, rule);
     return this;
   }
 

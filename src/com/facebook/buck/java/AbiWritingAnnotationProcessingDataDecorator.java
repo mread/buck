@@ -38,7 +38,7 @@ public class AbiWritingAnnotationProcessingDataDecorator
     implements AnnotationProcessingDataDecorator {
 
   @VisibleForTesting
-  static final Path ABI_PROCESSOR_CLASSPATH = Paths.get(System.getProperty(
+  public static final Path ABI_PROCESSOR_CLASSPATH = Paths.get(System.getProperty(
       "buck.abi_processor_classes", new File("build/abi_processor/classes").getAbsolutePath()));
 
   private final File outputFile;
