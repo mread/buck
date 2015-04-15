@@ -21,7 +21,6 @@ import com.facebook.buck.log.Logger;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.rules.RuleKey;
 import com.facebook.buck.step.ExecutionContext;
-import com.facebook.buck.util.ClassLoaderCache;
 import com.facebook.buck.util.HumanReadableException;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
@@ -35,6 +34,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.errorprone.ErrorProneJavaCompiler;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,11 +60,10 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
-import javax.tools.ToolProvider;
 
 /**
  * Command used to compile java libraries with a variety of ways to handle dependencies.
- * <p>
+ * <p/>
  * If {@code buildDependencies} is set to
  * {@link com.facebook.buck.rules.BuildDependencies#FIRST_ORDER_ONLY}, this class will invoke javac
  * using {@code declaredClasspathEntries} for the classpath. If {@code buildDependencies} is set to
@@ -145,33 +144,8 @@ public class Jsr199Javac implements Javac {
       ImmutableSet<Path> javaSourceFilePaths,
       Optional<Path> pathToSrcsList,
       Optional<Path> workingDirectory) {
-    JavaCompiler compiler;
 
-    if (javacJar.isPresent()) {
-      ClassLoaderCache classLoaderCache = context.getClassLoaderCache();
-      ClassLoader compilerClassLoader = classLoaderCache.getClassLoaderForClassPath(
-          ClassLoader.getSystemClassLoader(),
-          ImmutableList.of(javacJar.get()));
-      try {
-        compiler = (JavaCompiler)
-            compilerClassLoader.loadClass("com.sun.tools.javac.api.JavacTool")
-            .newInstance();
-      } catch (ClassNotFoundException | IllegalAccessException | InstantiationException ex) {
-        throw new RuntimeException(ex);
-      }
-    } else {
-      synchronized (ToolProvider.class) {
-        // ToolProvider has no synchronization internally, so if we don't synchronize from the
-        // outside we could wind up loading the compiler classes multiple times from different
-        // class loaders.
-        compiler = ToolProvider.getSystemJavaCompiler();
-      }
-
-      if (compiler == null) {
-        throw new HumanReadableException(
-            "No system compiler found. Did you install the JRE instead of the JDK?");
-      }
-    }
+    JavaCompiler compiler = new ErrorProneJavaCompiler();
 
     StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null);
     Iterable<? extends JavaFileObject> compilationUnits = ImmutableSet.of();

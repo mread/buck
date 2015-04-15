@@ -1,0 +1,20 @@
+java_library(
+  name = 'errorprone',
+  exported_deps = [
+    ':errorprone-core',
+    ':javac'
+  ],
+  visibility = ['PUBLIC']
+)
+
+prebuilt_jar(
+  name = 'errorprone-core',
+  binary_jar = 'error_prone_core-2.0.3-SNAPSHOT.jar',
+  visibility = []
+)
+
+prebuilt_jar(
+  name = 'javac',
+  binary_jar = 'javac-1.9.0-dev-r2644-1.jar',
+  visibility = []
+)

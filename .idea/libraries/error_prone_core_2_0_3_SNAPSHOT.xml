@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="error_prone_core-2.0.3-SNAPSHOT">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/third-party/java/errorprone/error_prone_core-2.0.3-SNAPSHOT.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/third-party/java/errorprone/error_prone_core-2.0.3-SNAPSHOT.jar!/" />
+    </SOURCES>
+  </library>
+</component>

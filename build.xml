@@ -79,6 +79,7 @@
     <include name="eclipse/org.eclipse.equinox.preferences_3.5.200.v20140224-1527.jar"/>
     <include name="eclipse/org.eclipse.jdt.core_3.10.2.v20150120-1634.jar"/>
     <include name="eclipse/org.eclipse.osgi_3.10.2.v20150203-1939.jar"/>
+    <include name="errorprone/error_prone_core-2.0.3-SNAPSHOT.jar" />
     <include name="guice/guice-3.0.jar" />
     <include name="guice/guice-assistedinject-3.0.jar" />
     <include name="guice/guice-multibindings-3.0.jar" />
