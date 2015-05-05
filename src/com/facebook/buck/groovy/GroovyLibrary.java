@@ -14,6 +14,7 @@ import com.facebook.buck.java.ResourcesRootPackageFinder;
 import com.facebook.buck.model.BuildTarget;
 import com.facebook.buck.model.BuildTargets;
 import com.facebook.buck.rules.AbstractBuildRule;
+import com.facebook.buck.rules.AddToRuleKey;
 import com.facebook.buck.rules.BuildContext;
 import com.facebook.buck.rules.BuildDependencies;
 import com.facebook.buck.rules.BuildRule;
@@ -53,12 +54,19 @@ public class GroovyLibrary extends AbstractBuildRule
 
   private static final BuildableProperties OUTPUT_TYPE = new BuildableProperties(LIBRARY);
 
-  private final Optional<Path> outputJar;
+
+  @AddToRuleKey
   private final ImmutableSortedSet<SourcePath> srcs;
+  @AddToRuleKey
   private final ImmutableSortedSet<SourcePath> resources;
-  private final ImmutableSortedSet<BuildRule> exportedDeps;
-  private final ImmutableSortedSet<BuildRule> providedDeps;
+  @AddToRuleKey(stringify = true)
   private final Optional<Path> resourcesRoot;
+  private final Optional<Path> outputJar;
+  @AddToRuleKey
+  private final ImmutableSortedSet<BuildRule> exportedDeps;
+  @AddToRuleKey
+  private final ImmutableSortedSet<BuildRule> providedDeps;
+
   private final Supplier<ImmutableSetMultimap<JavaLibrary, Path>> outputClasspathEntriesSupplier;
   private final Supplier<ImmutableSetMultimap<JavaLibrary, Path>> declaredClasspathEntriesSupplier;
   private final Supplier<ImmutableSetMultimap<JavaLibrary, Path>> transitiveClasspathEntriesSupplier;
@@ -296,7 +304,7 @@ public class GroovyLibrary extends AbstractBuildRule
 
   @Override
   public ImmutableSortedMap<String, HashCode> getClassNamesToHashes() {
-    throw new UnsupportedOperationException("getClassNamestnot supported in groovy");
+    throw new UnsupportedOperationException("getClassNamesToHashes not supported in groovy");
   }
 
   @Override
