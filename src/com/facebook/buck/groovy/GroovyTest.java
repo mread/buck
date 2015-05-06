@@ -4,6 +4,7 @@ import com.facebook.buck.io.ProjectFilesystem;
 import com.facebook.buck.java.JUnitStep;
 import com.facebook.buck.java.TestType;
 import com.facebook.buck.model.BuildTargets;
+import com.facebook.buck.rules.AddToRuleKey;
 import com.facebook.buck.rules.BuildContext;
 import com.facebook.buck.rules.BuildRule;
 import com.facebook.buck.rules.BuildRuleParams;
@@ -48,11 +49,16 @@ import javax.annotation.Nullable;
 
 public class GroovyTest extends GroovyLibrary implements TestRule {
 
+  @AddToRuleKey
   private final ImmutableList<String> vmArgs;
+  @AddToRuleKey
   private final ImmutableSet<Label> labels;
   private final ImmutableSet<String> contacts;
-  private final ImmutableSet<BuildRule> sourceUnderTest;
+  @AddToRuleKey
+  private ImmutableSet<BuildRule> sourceUnderTest;
+  @Nullable
   private CompiledClassFileFinder compiledClassFileFinder;
+  @AddToRuleKey
   private final Optional<Long> testRuleTimeoutMs;
 
   protected GroovyTest(
