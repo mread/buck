@@ -51,7 +51,6 @@ public class GroovyTest extends GroovyLibrary implements TestRule {
 
   @AddToRuleKey
   private final ImmutableList<String> vmArgs;
-  @AddToRuleKey
   private final ImmutableSet<Label> labels;
   private final ImmutableSet<String> contacts;
   @AddToRuleKey
