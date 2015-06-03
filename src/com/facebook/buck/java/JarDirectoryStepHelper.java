@@ -197,7 +197,7 @@ public class JarDirectoryStepHelper {
   }
 
   private static Level determineSeverity(ZipEntry entry) {
-    return entry.isDirectory() ? Level.FINE : Level.INFO;
+    return entry.isDirectory() ? Level.FINE : Level.FINE;
   }
 
   private static Manifest readManifest(ZipFile zip, ZipEntry manifestMfEntry) throws IOException {
