@@ -60,7 +60,8 @@ public class GroovyTestDescription implements Description<GroovyTestDescription.
             params.getBuildTarget(),
             resolver),
         args.resourcesRoot,
-        testRuleTimeoutMs);
+        testRuleTimeoutMs,
+        false);
   }
 
   public static ImmutableSet<BuildRule> validateAndGetSourcesUnderTest(
@@ -84,7 +85,7 @@ public class GroovyTestDescription implements Description<GroovyTestDescription.
             "Specified source under test for %s is not a Java library: %s (%s).",
             owner,
             rule.getFullyQualifiedName(),
-            rule.getType().getName());
+            rule.getType());
       }
       sourceUnderTest.add(rule);
     }

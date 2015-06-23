@@ -59,6 +59,8 @@ public class GroovyTest extends GroovyLibrary implements TestRule {
   private CompiledClassFileFinder compiledClassFileFinder;
   @AddToRuleKey
   private final Optional<Long> testRuleTimeoutMs;
+  @AddToRuleKey
+  private final boolean runTestSeparately;
 
   protected GroovyTest(
       BuildRuleParams params,
@@ -70,7 +72,8 @@ public class GroovyTest extends GroovyLibrary implements TestRule {
       Set<String> contacts,
       ImmutableSet<BuildRule> sourceUnderTest,
       Optional<Path> resourcesRoot,
-      Optional<Long> testRuleTimeoutMs) {
+      Optional<Long> testRuleTimeoutMs,
+      boolean runTestSeparately) {
     super(
         params,
         resolver,
@@ -84,6 +87,7 @@ public class GroovyTest extends GroovyLibrary implements TestRule {
     this.vmArgs = ImmutableList.copyOf(vmArgs);
     this.sourceUnderTest = Preconditions.checkNotNull(sourceUnderTest);
     this.testRuleTimeoutMs = testRuleTimeoutMs;
+    this.runTestSeparately = runTestSeparately;
   }
 
   @Override
@@ -97,7 +101,8 @@ public class GroovyTest extends GroovyLibrary implements TestRule {
       ExecutionContext executionContext,
       boolean isDryRun,
       boolean isShufflingTests,
-      TestSelectorList testSelectorList) {
+      TestSelectorList testSelectorList,
+      TestReportingCallback testReportingCallback) {
 
     Set<String> testClassNames = getClassNamesForSources(executionContext);
     if (testClassNames.isEmpty()) {
@@ -227,6 +232,11 @@ public class GroovyTest extends GroovyLibrary implements TestRule {
     return Paths.get(BuckConstant.GEN_DIR, pathsArray);
   }
 
+  @Override
+  public boolean runTestSeparately() {
+    return runTestSeparately;
+  }
+
   private Path getPathToTmpDirectory() {
     Path base = BuildTargets.getScratchPath(
         getBuildTarget(),
@@ -252,7 +262,7 @@ public class GroovyTest extends GroovyLibrary implements TestRule {
 
     CompiledClassFileFinder(GroovyTest rule, ExecutionContext context) {
       Path outputPath;
-      Path relativeOutputPath = rule.getPathToOutputFile();
+      Path relativeOutputPath = rule.getPathToOutput();
       if (relativeOutputPath != null) {
         outputPath = context.getProjectFilesystem().getAbsolutifier().apply(relativeOutputPath);
       } else {

@@ -261,7 +261,7 @@ public class GroovyLibrary extends AbstractBuildRule
 
   @Override
   @Nullable
-  public Path getPathToOutputFile() {
+  public Path getPathToOutput() {
     return outputJar.orNull();
   }
 
